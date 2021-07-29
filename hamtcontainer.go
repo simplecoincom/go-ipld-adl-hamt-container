@@ -84,7 +84,57 @@ type hamtContainer struct {
 }
 
 // NewHAMTContainer creates a new HAMTContainer
-func NewHAMTContainer(key interface{}, storage storage.Storage) (HAMTContainer, error) {
+func NewHAMTContainer(key interface{}) (HAMTContainer, error) {
+	var err error
+	var typedKey []byte
+
+	// Supported key types for HAMTContainer key
+	switch k := key.(type) {
+	case string:
+		typedKey, err = hex.DecodeString(k)
+		if err != nil {
+			// Let's try pure string to byte
+			typedKey = []byte(k)
+		}
+	case []byte:
+		typedKey = k
+	default:
+		return nil, ErrHAMTUnsupportedKeyType
+	}
+
+	newHAMTContainer := hamtContainer{
+		key:     typedKey,
+		storage: storage.NewMemoryStorage(),
+	}
+
+	// Sets the link system
+	newHAMTContainer.linkSystem = cidlink.DefaultLinkSystem()
+	newHAMTContainer.linkProto = cidlink.LinkPrototype{Prefix: cid.Prefix{
+		Version:  1, // Usually '1'.
+		Codec:    uint64(multicodec.DagCbor),
+		MhType:   uint64(multicodec.Sha2_512),
+		MhLength: 64, // sha2-512 hash has a 64-byte sum.
+	}}
+
+	// Sets the writer and reader interfaces for the link system
+	newHAMTContainer.linkSystem.StorageWriteOpener = newHAMTContainer.storage.OpenWrite
+	newHAMTContainer.linkSystem.StorageReadOpener = newHAMTContainer.storage.OpenRead
+
+	// Creates the builder for the HAMT
+	newHAMTContainer.builder = hamt.NewBuilder(hamt.Prototype{BitWidth: 3, BucketSize: 64}).
+		WithLinking(newHAMTContainer.linkSystem, newHAMTContainer.linkProto)
+
+	// Sets the assembler to build the k/v for the map structure
+	newHAMTContainer.assembler, err = newHAMTContainer.builder.BeginMap(0)
+	if err != nil {
+		return nil, err
+	}
+
+	return &newHAMTContainer, nil
+}
+
+// NewHAMTContainer creates a new HAMTContainer
+func NewHAMTContainerWithLinking(key interface{}, storage storage.Storage) (HAMTContainer, error) {
 	var err error
 	var typedKey []byte
 
