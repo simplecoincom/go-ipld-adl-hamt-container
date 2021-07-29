@@ -1,4 +1,4 @@
-module github.com/simplecoincom/go-ipld-hamt-container
+module github.com/simplecoincom/go-ipld-adl-hamt-container
 
 go 1.16
 

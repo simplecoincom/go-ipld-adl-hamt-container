@@ -10,8 +10,8 @@ import (
 	_ "github.com/ipld/go-ipld-prime/codec/dagcbor"
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	basicnode "github.com/ipld/go-ipld-prime/node/basic"
-	"github.com/simplecoincom/go-ipld-hamt-container/storage"
-	"github.com/simplecoincom/go-ipld-hamt-container/utils"
+	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
+	"github.com/simplecoincom/go-ipld-adl-hamt-container/utils"
 
 	"github.com/multiformats/go-multicodec"
 )

@@ -1,6 +1,6 @@
-# go-ipld-hamt-container
+# go-ipld-adl-hamt-container
 
-> go-ipld-hamt-container is a wrapper around `go-ipld-adl-hamt` project
+> go-ipld-adl-hamt-container is a wrapper around `go-ipld-adl-hamt` project
 
 ## How to use
 
@@ -8,7 +8,7 @@
 package main
 
 import (
-    "github.com/simplecoincom/go-ipld-hamt-container/storage"
+    "github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 )
 
 func main() {

@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	ipld "github.com/ipld/go-ipld-prime"
-	"github.com/simplecoincom/go-ipld-hamt-container/storage"
+	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 )
 
 func TestHAMTContainerWithString(t *testing.T) {
