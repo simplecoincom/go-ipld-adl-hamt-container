@@ -3,17 +3,15 @@ package hamtcontainer
 import (
 	"encoding/hex"
 	"errors"
+	"sync"
 
 	"github.com/ipfs/go-cid"
 	hamt "github.com/ipld/go-ipld-adl-hamt"
 	ipld "github.com/ipld/go-ipld-prime"
 	_ "github.com/ipld/go-ipld-prime/codec/dagcbor"
-	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	basicnode "github.com/ipld/go-ipld-prime/node/basic"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/utils"
-
-	"github.com/multiformats/go-multicodec"
 )
 
 var ErrHAMTNotBuild = errors.New("HAMT not ready, build first")
@@ -29,6 +27,9 @@ type HAMTContainer interface {
 	// Isbuild returns true if the under ipld-adl-hamt is build, it means that there's pld.Node
 	// representing the ipld-adl-hamt ready to be used with CID and Link
 	IsBuild() bool
+	// IsAutoBuild return true if the auto build is active, if active it's not required to call Build
+	// It will build the ipld-adl-hamt automatically when needed
+	IsAutoBuild() bool
 	// Key returns the identification of the ipld-adl-hamt, it's like id, but there's no guarantee to have a
 	// nested ipld-adl-hamt with the same key
 	Key() []byte
@@ -43,26 +44,24 @@ type HAMTContainer interface {
 	LoadLink(link ipld.Link) error
 	// Set will receive a key value params and store the values into the ipld-adl-hamt structure
 	// It can return an error if the params types aren't supported
-	Set(key interface{}, value interface{}) error
+	Set(key []byte, value interface{}) error
 	// Get will return the value for the given key
 	// It can return an error if the param types aren't supported or key doesn't exists
-	Get(key interface{}) (interface{}, error)
+	Get(key []byte) (interface{}, error)
 	// GetAsLink is helper for return a typed ipld.Link value from a given key
 	// It can return an error if the value isn't a link or if the given key doesn't exists
-	GetAsLink(key interface{}) (ipld.Link, error)
+	GetAsLink(key []byte) (ipld.Link, error)
 	// GetAsBytes is helper for return a typed []byte value from a given key
 	// It can return an error if the value isn't compatible with []byte or if the given key doesn't exists
-	GetAsBytes(key interface{}) ([]byte, error)
+	GetAsBytes(key []byte) ([]byte, error)
 	// GetAsString is helper for return a typed string value from a given key
 	// It can return an error if the value isn't a compatible with string or if the given key doesn't exists
-	GetAsString(key interface{}) (string, error)
-	// Iterator is a helper method to return the ipld.MapIterator (ipld-adl-hamt implementation for more info)
-	Iterator() ipld.MapIterator
+	GetAsString(key []byte) (string, error)
 	// View helps to iterate on the keys and values available
 	// It can return an error if something goes wrong internally
 	// It also can return an error if the iterator function returns an error too
 	// If something happpens it should
-	View(iterFunc func(key interface{}, value interface{}) error) error
+	View(iterFunc func(key []byte, value interface{}) error) error
 	// Build will create the ipld.Node representing the ipld-adl-hamt structure
 	// It important to build before create link and cid
 	// Becasue the ipld-adl-hamt is a immutable structure, the Build method should be called
@@ -70,208 +69,65 @@ type HAMTContainer interface {
 	Build() error
 }
 
+type HAMTContainerParams struct {
+	key                 []byte
+	storage             storage.Storage
+	link                ipld.Link
+	isAutoBuild         bool
+	parentHAMTContainer HAMTContainer
+}
+
 type hamtContainer struct {
-	key        []byte
-	storage    storage.Storage
+	HAMTContainerParams
+	mutex      sync.RWMutex
 	linkSystem ipld.LinkSystem
 	linkProto  ipld.LinkPrototype
 	assembler  ipld.MapAssembler
 	node       ipld.Node
-	link       ipld.Link
 	cid        cid.Cid
 	builder    *hamt.Builder
 	isBuild    bool
-}
-
-// NewHAMTContainer creates a new HAMTContainer
-func NewHAMTContainer(key interface{}) (HAMTContainer, error) {
-	var err error
-	var typedKey []byte
-
-	// Supported key types for HAMTContainer key
-	switch k := key.(type) {
-	case string:
-		typedKey, err = hex.DecodeString(k)
-		if err != nil {
-			// Let's try pure string to byte
-			typedKey = []byte(k)
-		}
-	case []byte:
-		typedKey = k
-	default:
-		return nil, ErrHAMTUnsupportedKeyType
-	}
-
-	newHAMTContainer := hamtContainer{
-		key:     typedKey,
-		storage: storage.NewMemoryStorage(),
-	}
-
-	// Sets the link system
-	newHAMTContainer.linkSystem = cidlink.DefaultLinkSystem()
-	newHAMTContainer.linkProto = cidlink.LinkPrototype{Prefix: cid.Prefix{
-		Version:  1, // Usually '1'.
-		Codec:    uint64(multicodec.DagCbor),
-		MhType:   uint64(multicodec.Sha2_512),
-		MhLength: 64, // sha2-512 hash has a 64-byte sum.
-	}}
-
-	// Sets the writer and reader interfaces for the link system
-	newHAMTContainer.linkSystem.StorageWriteOpener = newHAMTContainer.storage.OpenWrite
-	newHAMTContainer.linkSystem.StorageReadOpener = newHAMTContainer.storage.OpenRead
-
-	// Creates the builder for the HAMT
-	newHAMTContainer.builder = hamt.NewBuilder(hamt.Prototype{BitWidth: 3, BucketSize: 64}).
-		WithLinking(newHAMTContainer.linkSystem, newHAMTContainer.linkProto)
-
-	// Sets the assembler to build the k/v for the map structure
-	newHAMTContainer.assembler, err = newHAMTContainer.builder.BeginMap(0)
-	if err != nil {
-		return nil, err
-	}
-
-	return &newHAMTContainer, nil
-}
-
-// NewHAMTContainer creates a new HAMTContainer
-func NewHAMTContainerWithLinking(key interface{}, storage storage.Storage) (HAMTContainer, error) {
-	var err error
-	var typedKey []byte
-
-	// Supported key types for HAMTContainer key
-	switch k := key.(type) {
-	case string:
-		typedKey, err = hex.DecodeString(k)
-		if err != nil {
-			// Let's try pure string to byte
-			typedKey = []byte(k)
-		}
-	case []byte:
-		typedKey = k
-	default:
-		return nil, ErrHAMTUnsupportedKeyType
-	}
-
-	newHAMTContainer := hamtContainer{
-		key:     typedKey,
-		storage: storage,
-	}
-
-	// Sets the link system
-	newHAMTContainer.linkSystem = cidlink.DefaultLinkSystem()
-	newHAMTContainer.linkProto = cidlink.LinkPrototype{Prefix: cid.Prefix{
-		Version:  1, // Usually '1'.
-		Codec:    uint64(multicodec.DagCbor),
-		MhType:   uint64(multicodec.Sha2_512),
-		MhLength: 64, // sha2-512 hash has a 64-byte sum.
-	}}
-
-	// Sets the writer and reader interfaces for the link system
-	newHAMTContainer.linkSystem.StorageWriteOpener = newHAMTContainer.storage.OpenWrite
-	newHAMTContainer.linkSystem.StorageReadOpener = newHAMTContainer.storage.OpenRead
-
-	// Creates the builder for the HAMT
-	newHAMTContainer.builder = hamt.NewBuilder(hamt.Prototype{BitWidth: 3, BucketSize: 64}).
-		WithLinking(newHAMTContainer.linkSystem, newHAMTContainer.linkProto)
-
-	// Sets the assembler to build the k/v for the map structure
-	newHAMTContainer.assembler, err = newHAMTContainer.builder.BeginMap(0)
-	if err != nil {
-		return nil, err
-	}
-
-	return &newHAMTContainer, nil
-}
-
-// NewHAMTContainerFromLink creates a new HAMTContainer from a link
-func NewHAMTContainerFromLink(key interface{}, storage storage.Storage, link ipld.Link) (HAMTContainer, error) {
-	var err error
-	var typedKey []byte
-
-	// Supported key types for HAMTContainer key
-	switch k := key.(type) {
-	case string:
-		typedKey, err = hex.DecodeString(k)
-		if err != nil {
-			// Let's try pure string to byte
-			typedKey = []byte(k)
-		}
-	case []byte:
-		typedKey = k
-	default:
-		return nil, ErrHAMTUnsupportedKeyType
-	}
-
-	newHAMTContainer := hamtContainer{
-		key:     typedKey,
-		storage: storage,
-	}
-
-	// Sets the link system
-	newHAMTContainer.linkSystem = cidlink.DefaultLinkSystem()
-	newHAMTContainer.linkProto = cidlink.LinkPrototype{Prefix: cid.Prefix{
-		Version:  1, // Usually '1'.
-		Codec:    uint64(multicodec.DagCbor),
-		MhType:   uint64(multicodec.Sha2_512),
-		MhLength: 64, // sha2-512 hash has a 64-byte sum.
-	}}
-
-	// Sets the writer and reader interfaces for the link system
-	newHAMTContainer.linkSystem.StorageWriteOpener = newHAMTContainer.storage.OpenWrite
-	newHAMTContainer.linkSystem.StorageReadOpener = newHAMTContainer.storage.OpenRead
-
-	// Creates the builder for the HAMT
-	newHAMTContainer.builder = hamt.NewBuilder(hamt.Prototype{BitWidth: 3, BucketSize: 64}).
-		WithLinking(newHAMTContainer.linkSystem, newHAMTContainer.linkProto)
-
-	// Sets the assembler to build the k/v for the map structure
-	newHAMTContainer.assembler, err = newHAMTContainer.builder.BeginMap(0)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := newHAMTContainer.LoadLink(link); err != nil {
-		return nil, err
-	}
-
-	return &newHAMTContainer, nil
-}
-
-// NewHAMTContainerFromNested creates a new HAMTContainer from parent HAMTContainer
-func NewHAMTContainerFromNested(key interface{}, parentHAMTContainer HAMTContainer) (HAMTContainer, error) {
-	var err error
-
-	link, err := parentHAMTContainer.GetAsLink(key)
-	if err != nil {
-		return nil, err
-	}
-
-	newHAMTContainer, err := NewHAMTContainerFromLink(key, parentHAMTContainer.Storage(), link)
-	if err != nil {
-		return nil, err
-	}
-
-	return newHAMTContainer, nil
+	isLoaded   bool
 }
 
 // IsBuild returns if the HAMT is build
-func (hc hamtContainer) IsBuild() bool {
+func (hc *hamtContainer) IsBuild() bool {
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
+
 	return hc.isBuild
 }
 
+// IsAutoBuild returns if the HAMT auto builds when needed
+func (hc *hamtContainer) IsAutoBuild() bool {
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
+
+	return hc.isAutoBuild
+}
+
 // Key returns the key that identifies the HAMT
-func (hc hamtContainer) Key() []byte {
+func (hc *hamtContainer) Key() []byte {
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
+
 	return hc.key
 }
 
 // Storage returns the linking storage used by the HAMT
-func (hc hamtContainer) Storage() storage.Storage {
+func (hc *hamtContainer) Storage() storage.Storage {
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
+
 	return hc.storage
 }
 
 // CID will return the cid.Cid for the ipld.Node
 // Or it will return an error if the ipld.Node for the HAMT isn't built
-func (hc hamtContainer) CID() (cid.Cid, error) {
+func (hc *hamtContainer) CID() (cid.Cid, error) {
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
+
 	if !hc.isBuild {
 		return cid.Cid{}, ErrHAMTNotBuild
 	}
@@ -281,7 +137,17 @@ func (hc hamtContainer) CID() (cid.Cid, error) {
 
 // GetLink will return the ipld.Link for the ipld.Node
 // Or it will return an error if the ipld.Node for the HAMT isn't built
-func (hc hamtContainer) GetLink() (ipld.Link, error) {
+func (hc *hamtContainer) GetLink() (ipld.Link, error) {
+	if hc.isAutoBuild && !hc.isLoaded {
+		// If auto build is enabled
+		if err := hc.Build(); err != nil {
+			return nil, err
+		}
+	}
+
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
+
 	if !hc.isBuild {
 		return nil, ErrHAMTNotBuild
 	}
@@ -292,6 +158,9 @@ func (hc hamtContainer) GetLink() (ipld.Link, error) {
 // LoadLink will load the storage data from a new HAMTContainer
 // Or it illl return and error if the load failed
 func (hc *hamtContainer) LoadLink(link ipld.Link) error {
+	hc.mutex.Lock()
+	defer hc.mutex.Unlock()
+
 	nodePrototye := basicnode.Prototype.Any
 
 	node, err := hc.linkSystem.Load(
@@ -319,24 +188,13 @@ func (hc *hamtContainer) LoadLink(link ipld.Link) error {
 // Set adds a new k/v content for the HAMT
 // For string values it will add k/v pair of strings
 // For ipld.Link values it will add string key and a link for another HAMT structure as value
-func (hc *hamtContainer) Set(key interface{}, value interface{}) error {
-	var err error
+func (hc *hamtContainer) Set(key []byte, value interface{}) error {
+	hc.mutex.Lock()
+	defer hc.mutex.Unlock()
 
-	// Support types for key
-	// The final result should be always a string
-	switch k := key.(type) {
-	case string:
-		err := hc.assembler.AssembleKey().AssignString(k)
-		if err != nil {
-			return err
-		}
-	case []byte:
-		err = hc.assembler.AssembleKey().AssignString(hex.EncodeToString([]byte(k)))
-		if err != nil {
-			return err
-		}
-	default:
-		return ErrHAMTUnsupportedKeyType
+	err := hc.assembler.AssembleKey().AssignString(hex.EncodeToString([]byte(key)))
+	if err != nil {
+		return err
 	}
 
 	// Support types for value
@@ -389,26 +247,22 @@ func (hc *hamtContainer) Set(key interface{}, value interface{}) error {
 
 // Get will return the value by the key
 // It will return error if the hamt not build or if the value not found
-func (hc hamtContainer) Get(key interface{}) (interface{}, error) {
+func (hc *hamtContainer) Get(key []byte) (interface{}, error) {
+	if hc.isAutoBuild && !hc.isLoaded {
+		// If auto build is enabled
+		if err := hc.Build(); err != nil {
+			return nil, err
+		}
+	}
+
+	hc.mutex.Lock()
+	defer hc.mutex.Unlock()
+
 	if !hc.isBuild {
 		return nil, ErrHAMTNotBuild
 	}
 
-	var err error
-	var typedKey string
-
-	// Support types for key
-	// The final value will be always a string
-	switch k := key.(type) {
-	case string:
-		typedKey = k
-	case []byte:
-		typedKey = hex.EncodeToString(k)
-	default:
-		return nil, ErrHAMTUnsupportedKeyType
-	}
-
-	valNode, err := hc.node.LookupByString(typedKey)
+	valNode, err := hc.node.LookupByString(hex.EncodeToString(key))
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +276,7 @@ func (hc hamtContainer) Get(key interface{}) (interface{}, error) {
 
 // GetAsLink returns a ipld.Link type by key
 // The method will fail if the returned type isn't of type ipld.Link
-func (hc hamtContainer) GetAsLink(key interface{}) (ipld.Link, error) {
+func (hc *hamtContainer) GetAsLink(key []byte) (ipld.Link, error) {
 	result, err := hc.Get(key)
 	if err != nil {
 		return nil, err
@@ -438,7 +292,7 @@ func (hc hamtContainer) GetAsLink(key interface{}) (ipld.Link, error) {
 
 // GetAsBytes returns a byte slice type by key
 // The method will fail if the returned type isn't of type byte slice
-func (hc hamtContainer) GetAsBytes(key interface{}) ([]byte, error) {
+func (hc *hamtContainer) GetAsBytes(key []byte) ([]byte, error) {
 	result, err := hc.Get(key)
 	if err != nil {
 		return nil, err
@@ -454,7 +308,7 @@ func (hc hamtContainer) GetAsBytes(key interface{}) ([]byte, error) {
 
 // GetAsString returns a string type by key
 // The method will fail if the returned type isn't of type string or failed to convert to string
-func (hc hamtContainer) GetAsString(key interface{}) (string, error) {
+func (hc *hamtContainer) GetAsString(key []byte) (string, error) {
 	result, err := hc.Get(key)
 	if err != nil {
 		return "", err
@@ -470,21 +324,29 @@ func (hc hamtContainer) GetAsString(key interface{}) (string, error) {
 	}
 }
 
-// Iterator will create a map iterator to iterate over keys of the hamt
-func (hc hamtContainer) Iterator() ipld.MapIterator {
-	return hc.node.MapIterator()
-}
-
 // View will iterate over each item key map
-func (hc hamtContainer) View(iterFunc func(key interface{}, value interface{}) error) error {
-	iter := hc.Iterator()
+func (hc *hamtContainer) View(iterFunc func(key []byte, value interface{}) error) error {
+	hc.mutex.Lock()
+	defer hc.mutex.Unlock()
+
+	iter := hc.node.MapIterator()
 	for !iter.Done() {
 		k, v, err := iter.Next()
 		if err != nil {
 			return err
 		}
 
-		err = iterFunc(k, v)
+		kk, err := k.AsString()
+		if err != nil {
+			return err
+		}
+
+		bs, err := hex.DecodeString(kk)
+		if err != nil {
+			return err
+		}
+
+		err = iterFunc(bs, v)
 		if err != nil {
 			return err
 		}
@@ -495,7 +357,10 @@ func (hc hamtContainer) View(iterFunc func(key interface{}, value interface{}) e
 // Build will build the HAMT internal representation inside the container
 // It will have Link, and ipld.Node representing the HAMT also CID for the root content
 func (hc *hamtContainer) Build() error {
-	if hc.isBuild {
+	hc.mutex.Lock()
+	defer hc.mutex.Unlock()
+
+	if hc.isBuild && !hc.isAutoBuild {
 		return ErrHAMTAlreadyBuild
 	}
 
