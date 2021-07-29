@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	ipld "github.com/ipld/go-ipld-prime"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 )
 
@@ -46,17 +47,17 @@ func TestHAMTContainerViewIterator(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, val, qt.Equals, "bar")
 
-	// // View iterator
-	// err = rootHAMT.View(func(key []byte, value interface{}) error {
-	// 	// qt.Assert(t, err, qt.IsNil)
-	// 	// qt.Assert(t, []string{[]byte("foo"), []byte("zoo")}, qt.Any(qt.Equals), k)
+	// View iterator
+	err = rootHAMT.View(func(key []byte, value interface{}) error {
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, []string{"foo", "zoo"}, qt.Any(qt.Equals), string(key))
 
-	// 	// v, err := value.(ipld.Node).AsString()
-	// 	// qt.Assert(t, err, qt.IsNil)
-	// 	// qt.Assert(t, []string{"bar", "zar"}, qt.Any(qt.Equals), v)
-	// 	return nil
-	// })
-	// qt.Assert(t, err, qt.IsNil)
+		v, err := value.(ipld.Node).AsString()
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, []string{"bar", "zar"}, qt.Any(qt.Equals), v)
+		return nil
+	})
+	qt.Assert(t, err, qt.IsNil)
 }
 
 func TestHAMTContainerWithBytes(t *testing.T) {
