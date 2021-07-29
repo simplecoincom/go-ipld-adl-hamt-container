@@ -16,6 +16,8 @@ import (
 
 var ErrHAMTNotBuild = errors.New("HAMT not ready, build first")
 var ErrHAMTValueNotFound = errors.New("Value not found at HAMT")
+var ErrHAMTNoNestedFound = errors.New("No nested found with the given key")
+var ErrHAMTFailedToLoadNested = errors.New("Failed to load link from nested HAMT")
 var ErrHAMTAlreadyBuild = errors.New("HAMT already build")
 var ErrHAMTUnsupportedValueType = errors.New("Value type not supported")
 var ErrHAMTUnsupportedKeyType = errors.New("Key type not supported")
@@ -24,19 +26,15 @@ var ErrHAMTFailedToGetAsLink = errors.New("Value returned should ipld.Link")
 // HAMTContainer is just a way to put together all HAMT needed structures in order to create a ipld.Node
 // which will represent the ipld-adl-hamt after the builder runs
 type HAMTContainer interface {
-	// Isbuild returns true if the under ipld-adl-hamt is build, it means that there's pld.Node
-	// representing the ipld-adl-hamt ready to be used with CID and Link
-	IsBuild() bool
 	// IsAutoBuild return true if the auto build is active, if active it's not required to call Build
 	// It will build the ipld-adl-hamt automatically when needed
-	IsAutoBuild() bool
-	// Key returns the identification of the ipld-adl-hamt, it's like id, but there's no guarantee to have a
-	// nested ipld-adl-hamt with the same key
 	Key() []byte
 	// Storage returns the underline storage used to store ipld-adl-hamt structure
 	Storage() storage.Storage
 	// CID will return the unique content id, only available after Build
 	CID() (cid.Cid, error)
+	// Parent will return the parent associated HAMTContainer to this
+	Parent() HAMTContainer
 	// GetLink returns the ipld.Link representation for the node ipld-adl-hamt
 	GetLink() (ipld.Link, error)
 	// LoadLink will receive a ipld.Link from another ipld-adl-hamt and try to load it
@@ -62,18 +60,12 @@ type HAMTContainer interface {
 	// It also can return an error if the iterator function returns an error too
 	// If something happpens it should
 	View(iterFunc func(key []byte, value interface{}) error) error
-	// Build will create the ipld.Node representing the ipld-adl-hamt structure
-	// It important to build before create link and cid
-	// Becasue the ipld-adl-hamt is a immutable structure, the Build method should be called
-	// Everytime that some key/value is added using Set method
-	Build() error
 }
 
 type HAMTContainerParams struct {
 	key                 []byte
 	storage             storage.Storage
 	link                ipld.Link
-	isAutoBuild         bool
 	parentHAMTContainer HAMTContainer
 }
 
@@ -86,24 +78,7 @@ type hamtContainer struct {
 	node       ipld.Node
 	cid        cid.Cid
 	builder    *hamt.Builder
-	isBuild    bool
 	isLoaded   bool
-}
-
-// IsBuild returns if the HAMT is build
-func (hc *hamtContainer) IsBuild() bool {
-	hc.mutex.RLock()
-	defer hc.mutex.RUnlock()
-
-	return hc.isBuild
-}
-
-// IsAutoBuild returns if the HAMT auto builds when needed
-func (hc *hamtContainer) IsAutoBuild() bool {
-	hc.mutex.RLock()
-	defer hc.mutex.RUnlock()
-
-	return hc.isAutoBuild
 }
 
 // Key returns the key that identifies the HAMT
@@ -128,28 +103,34 @@ func (hc *hamtContainer) CID() (cid.Cid, error) {
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()
 
-	if !hc.isBuild {
-		return cid.Cid{}, ErrHAMTNotBuild
+	if err := hc.build(); err != nil {
+		return cid.Cid{}, err
 	}
 
 	return hc.cid, nil
 }
 
-// GetLink will return the ipld.Link for the ipld.Node
-// Or it will return an error if the ipld.Node for the HAMT isn't built
-func (hc *hamtContainer) GetLink() (ipld.Link, error) {
-	if hc.isAutoBuild && !hc.isLoaded {
-		// If auto build is enabled
-		if err := hc.Build(); err != nil {
-			return nil, err
-		}
-	}
-
+// Parent will return the parent HAMTContainer
+func (hc *hamtContainer) Parent() HAMTContainer {
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()
 
-	if !hc.isBuild {
-		return nil, ErrHAMTNotBuild
+	return hc.parentHAMTContainer
+}
+
+// GetLink will return the ipld.Link for the ipld.Node
+// Or it will return an error if the ipld.Node for the HAMT isn't built
+func (hc *hamtContainer) GetLink() (ipld.Link, error) {
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
+
+	// If auto build is enabled
+	if err := hc.build(); err != nil {
+		return nil, err
+	}
+
+	if err := hc.build(); err != nil {
+		return nil, err
 	}
 
 	return hc.link, nil
@@ -179,8 +160,6 @@ func (hc *hamtContainer) LoadLink(link ipld.Link) error {
 	if err != nil {
 		return err
 	}
-
-	hc.isBuild = true
 
 	return nil
 }
@@ -238,28 +217,20 @@ func (hc *hamtContainer) Set(key []byte, value interface{}) error {
 		return ErrHAMTUnsupportedValueType
 	}
 
-	// Something is added the ipld-adl-hamt should be build again
-	// Consider this value a dirty state flag
-	hc.isBuild = false
-
 	return nil
 }
 
 // Get will return the value by the key
 // It will return error if the hamt not build or if the value not found
 func (hc *hamtContainer) Get(key []byte) (interface{}, error) {
-	if hc.isAutoBuild && !hc.isLoaded {
-		// If auto build is enabled
-		if err := hc.Build(); err != nil {
-			return nil, err
-		}
-	}
-
 	hc.mutex.Lock()
 	defer hc.mutex.Unlock()
 
-	if !hc.isBuild {
-		return nil, ErrHAMTNotBuild
+	if !hc.isLoaded {
+		// If auto build is enabled
+		if err := hc.build(); err != nil {
+			return nil, err
+		}
 	}
 
 	valNode, err := hc.node.LookupByString(hex.EncodeToString(key))
@@ -354,15 +325,9 @@ func (hc *hamtContainer) View(iterFunc func(key []byte, value interface{}) error
 	return nil
 }
 
-// Build will build the HAMT internal representation inside the container
-// It will have Link, and ipld.Node representing the HAMT also CID for the root content
-func (hc *hamtContainer) Build() error {
-	hc.mutex.Lock()
-	defer hc.mutex.Unlock()
-
-	if hc.isBuild && !hc.isAutoBuild {
-		return ErrHAMTAlreadyBuild
-	}
+func (hc *hamtContainer) build() error {
+	// build will build the HAMT internal representation inside the container
+	// It will have Link, and ipld.Node representing the HAMT also CID for the root content
 
 	err := hc.assembler.Finish()
 	if err != nil {
@@ -386,8 +351,6 @@ func (hc *hamtContainer) Build() error {
 	if err != nil {
 		return err
 	}
-
-	hc.isBuild = true
 
 	return err
 }

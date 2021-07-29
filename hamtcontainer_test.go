@@ -10,7 +10,7 @@ import (
 )
 
 func TestHAMTContainerWithString(t *testing.T) {
-	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).AutoBuild(true).Build()
+	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Build()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set some k/v
@@ -39,9 +39,6 @@ func TestHAMTContainerViewIterator(t *testing.T) {
 	qt.Assert(t, rootHAMT.Set([]byte("foo"), "bar"), qt.IsNil)
 	qt.Assert(t, rootHAMT.Set([]byte("zoo"), "zar"), qt.IsNil)
 
-	// Build the HAMT Node
-	qt.Assert(t, rootHAMT.Build(), qt.IsNil)
-
 	// Get node value as string
 	val, err := rootHAMT.GetAsString([]byte("foo"))
 	qt.Assert(t, err, qt.IsNil)
@@ -68,16 +65,14 @@ func TestHAMTContainerWithBytes(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set some k/v
-	qt.Assert(t, rootHAMT.Set([]byte([]byte("foo")), []byte("bar")), qt.IsNil)
+	qt.Assert(t, rootHAMT.Set([]byte("foo"), []byte("bar")), qt.IsNil)
 
-	// Build the HAMT Node
-	qt.Assert(t, rootHAMT.Build(), qt.IsNil)
-
-	val, err := rootHAMT.GetAsBytes([]byte([]byte("foo")))
+	// Get node value as string
+	val, err := rootHAMT.GetAsBytes([]byte("foo"))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, string(val), qt.Equals, "bar")
 
-	val, err = rootHAMT.GetAsBytes([]byte([]byte("zoo")))
+	val, err = rootHAMT.GetAsBytes([]byte("zoo"))
 	qt.Assert(t, err, qt.Not(qt.IsNil))
 	qt.Assert(t, val, qt.IsNil)
 }
@@ -86,7 +81,7 @@ func TestNestedHAMTContainer(t *testing.T) {
 	store := storage.NewMemoryStorage()
 
 	// Create the first HAMT
-	childHAMT, err := NewHAMTBuilder().Key([]byte("child")).Storage(store).AutoBuild(true).Build()
+	childHAMT, err := NewHAMTBuilder().Key([]byte("child")).Storage(store).Build()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set some k/v
@@ -94,7 +89,7 @@ func TestNestedHAMTContainer(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Creates the parent HAMT
-	parentHAMT, err := NewHAMTBuilder().Key([]byte("parent")).Storage(store).AutoBuild(true).Build()
+	parentHAMT, err := NewHAMTBuilder().Key([]byte("parent")).Storage(store).Build()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Put the child HAMT as values of the parent HAMT
@@ -102,7 +97,7 @@ func TestNestedHAMTContainer(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Load nested HAMT from parent HAMT
-	newHC, err := NewHAMTBuilder().Key([]byte("child")).Storage(store).AutoBuild(true).FromNested(parentHAMT).Build()
+	newHC, err := NewHAMTBuilder().Key([]byte("child")).FromNested(parentHAMT).Build()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Get value as string
