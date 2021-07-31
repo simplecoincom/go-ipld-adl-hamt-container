@@ -102,10 +102,11 @@ func TestHAMTContainerWithIPFS(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, string(val), qt.Equals, "bar")
 
+	// Get HAMT link
 	lnk, err := rootHAMT.GetLink()
 	qt.Assert(t, err, qt.IsNil)
 
-	// Load nested HAMT from parent HAMT
+	// Load HAMT from link
 	newHC, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).FromLink(lnk).Build()
 	qt.Assert(t, err, qt.IsNil)
 
