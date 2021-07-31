@@ -114,7 +114,6 @@ func TestHAMTContainerWithIPFS(t *testing.T) {
 	val2, err := newHC.GetAsBytes([]byte("foo"))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, string(val2), qt.Equals, "bar")
-
 }
 
 func TestNestedHAMTContainer(t *testing.T) {

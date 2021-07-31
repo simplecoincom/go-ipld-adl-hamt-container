@@ -10,6 +10,15 @@ import (
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 )
 
+// IPFS structu contains the IPFS shell connection
+//
+// The OpenRead method conforms to ipld.BlockReadOpener,
+// and the OpenWrite method conforms to ipld.BlockWriteOpener.
+// Therefore it's easy to use in a LinkSystem like this:
+//
+//		store := storage.Redis{}
+//		lsys.StorageReadOpener = (&store).OpenRead
+//		lsys.StorageWriteOpener = (&store).OpenWrite
 type IPFS struct {
 	shell *ipfsApi.Shell
 }
@@ -45,6 +54,7 @@ func (store *IPFS) OpenWrite(_ ipld.LinkContext) (io.Writer, ipld.BlockWriteComm
 	return &buf, func(lnk ipld.Link) error {
 		_, err := store.shell.BlockPut(
 			buf.Bytes(),
+			// TODO: How to pass those params?
 			"cbor",
 			"sha2-512",
 			64,

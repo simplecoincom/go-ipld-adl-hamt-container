@@ -68,6 +68,16 @@ func main() {
 ## Nested HAMT containers
 
 ```go
+package main
+
+import (
+	"fmt"
+
+	ipfsApi "github.com/ipfs/go-ipfs-api"
+	hamtcontainer "github.com/simplecoincom/go-ipld-adl-hamt-container"
+	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
+)
+
 func main() {
  	store := storage.NewMemoryStorage()
 
@@ -108,5 +118,45 @@ func main() {
 	}
 
 	fmt.Println(val) // zar
+}
+```
+
+## Store and Load from IPFS
+
+```go
+func main() {
+	store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+
+	// Create the first HAMT
+	rootHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	if err != nil {
+		panic(err)
+	}
+
+	// Set some k/v
+	err = rootHAMT.Set([]byte("foo"), []byte("bar"))
+	if err != nil {
+		panic(err)
+	}
+
+	// Get HAMT link
+	lnk, err := rootHAMT.GetLink()
+	if err != nil {
+		panic(err)
+	}
+
+	// Load HAMT from link
+	newHC, err := hamtcontainer.NewHAMTBuilder().Key([]byte("root")).Storage(store).FromLink(lnk).Build()
+	if err != nil {
+		panic(err)
+	}
+
+	// Get node value as string
+	val2, err := newHC.GetAsString([]byte("foo"))
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(val2) // bar
 }
 ```
