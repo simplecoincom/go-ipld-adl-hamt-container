@@ -2,9 +2,12 @@ package hamtcontainer
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	ipfsApi "github.com/ipfs/go-ipfs-api"
 	ipld "github.com/ipld/go-ipld-prime"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 )
@@ -75,6 +78,42 @@ func TestHAMTContainerWithBytes(t *testing.T) {
 	val, err = rootHAMT.GetAsBytes([]byte("zoo"))
 	qt.Assert(t, err, qt.Not(qt.IsNil))
 	qt.Assert(t, val, qt.IsNil)
+}
+
+func TestHAMTContainerWithIPFS(t *testing.T) {
+	ipfsURL, ok := os.LookupEnv("IPFS_URL")
+	if !ok {
+		// export IPFS_URL="http://localhost:5001"
+		fmt.Println("Pass IPFS_URL env in order to test IPFS connection")
+		return
+	}
+
+	store := storage.NewIPFSStorage(ipfsApi.NewShell(ipfsURL))
+
+	// Create the first HAMT
+	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	qt.Assert(t, err, qt.IsNil)
+
+	// Set some k/v
+	qt.Assert(t, rootHAMT.Set([]byte("foo"), []byte("bar")), qt.IsNil)
+
+	// Get node value as string
+	val, err := rootHAMT.GetAsBytes([]byte("foo"))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, string(val), qt.Equals, "bar")
+
+	lnk, err := rootHAMT.GetLink()
+	qt.Assert(t, err, qt.IsNil)
+
+	// Load nested HAMT from parent HAMT
+	newHC, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).FromLink(lnk).Build()
+	qt.Assert(t, err, qt.IsNil)
+
+	// Get node value as string
+	val2, err := newHC.GetAsBytes([]byte("foo"))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, string(val2), qt.Equals, "bar")
+
 }
 
 func TestNestedHAMTContainer(t *testing.T) {

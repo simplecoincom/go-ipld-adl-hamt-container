@@ -5,12 +5,14 @@ import (
 
 	"github.com/ipfs/go-cid"
 	hamt "github.com/ipld/go-ipld-adl-hamt"
+	ipld "github.com/ipld/go-ipld-prime"
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	"github.com/multiformats/go-multicodec"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 )
 
 var ErrCantUseStorageAndNested = errors.New("Cannot use Storage and FromNested in the same build")
+var ErrCantUseParentAndLink = errors.New("Cannot use Parant and Link in the same build")
 
 type HAMTBuilder interface {
 	// KeyAsByte sets the identification of the ipld-adl-hamt, it's like id, but there's no guarantee to have a
@@ -20,6 +22,8 @@ type HAMTBuilder interface {
 	Storage(storage storage.Storage) HAMTBuilder
 	// FromNested creates a new HAMTContainer from parent HAMTContainer
 	FromNested(parent HAMTContainer) HAMTBuilder
+	// FromLink tries to creates a new HAMTContainer from the given link
+	FromLink(lnk ipld.Link) HAMTBuilder
 	// Build creates the HAMTContainer based on the parameters passed on builder functions
 	Build() (HAMTContainer, error)
 }
@@ -42,6 +46,12 @@ func (hb *hamtBuilder) Key(key []byte) HAMTBuilder {
 // Storage sets the storage for the future HAMTContainer
 func (hb *hamtBuilder) Storage(storage storage.Storage) HAMTBuilder {
 	hb.storage = storage
+	return hb
+}
+
+// FromLink sets the link for the future HAMTContainer
+func (hb *hamtBuilder) FromLink(link ipld.Link) HAMTBuilder {
+	hb.link = link
 	return hb
 }
 
@@ -68,6 +78,11 @@ func (hb *hamtBuilder) parseParamRules() error {
 	// If storage and parent are nil, we can use the default memory storage
 	if hb.storage == nil && hb.parentHAMTContainer == nil {
 		hb.storage = storage.NewMemoryStorage()
+	}
+
+	// If link and parent container
+	if hb.parentHAMTContainer != nil && hb.link != nil {
+		return ErrCantUseParentAndLink
 	}
 
 	// If parent isn't nil then we should use it storage
@@ -128,6 +143,15 @@ func (hb hamtBuilder) Build() (HAMTContainer, error) {
 
 		if err := newHAMTContainer.LoadLink(link); err != nil {
 			return nil, ErrHAMTFailedToLoadNested
+		}
+
+		newHAMTContainer.isLoaded = true
+	}
+
+	// If has a link we should load from it
+	if hb.link != nil {
+		if err := newHAMTContainer.LoadLink(hb.link); err != nil {
+			return nil, err
 		}
 
 		newHAMTContainer.isLoaded = true
