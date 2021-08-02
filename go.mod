@@ -11,4 +11,5 @@ require (
 	github.com/ipld/go-ipld-prime v0.10.0
 	github.com/multiformats/go-multicodec v0.2.0
 	github.com/pkg/errors v0.9.1
+	github.com/spf13/cobra v1.2.1
 )
