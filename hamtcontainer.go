@@ -57,6 +57,8 @@ type HAMTContainer interface {
 	// GetAsString is helper for return a typed string value from a given key
 	// It can return an error if the value isn't a compatible with string or if the given key doesn't exists
 	GetAsString(key []byte) (string, error)
+	// GetCar returns the compressed HAMT into a car format
+	GetCar() ([]byte, error)
 	// View helps to iterate on the keys and values available
 	// It can return an error if something goes wrong internally
 	// It also can return an error if the iterator function returns an error too
@@ -359,4 +361,8 @@ func (hc *hamtContainer) build() error {
 	}
 
 	return err
+}
+
+func (hc *hamtContainer) GetCar() ([]byte, error) {
+	return nil, nil
 }
