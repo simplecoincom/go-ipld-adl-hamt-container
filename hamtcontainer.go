@@ -14,6 +14,8 @@ import (
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/utils"
 )
 
+const reservedNameKey = "__META_RESERVED_HAMT_KEY__"
+
 var ErrHAMTNotBuild = errors.New("HAMT not ready, build first")
 var ErrHAMTValueNotFound = errors.New("Value not found at HAMT")
 var ErrHAMTNoNestedFound = errors.New("No nested found with the given key")
@@ -129,10 +131,6 @@ func (hc *hamtContainer) GetLink() (ipld.Link, error) {
 		return nil, err
 	}
 
-	if err := hc.build(); err != nil {
-		return nil, err
-	}
-
 	return hc.link, nil
 }
 
@@ -235,6 +233,9 @@ func (hc *hamtContainer) Get(key []byte) (interface{}, error) {
 
 	valNode, err := hc.node.LookupByString(hex.EncodeToString(key))
 	if err != nil {
+		if errors.Is(err, err.(ipld.ErrNotExists)) {
+			return nil, ErrHAMTValueNotFound
+		}
 		return nil, err
 	}
 
@@ -315,6 +316,11 @@ func (hc *hamtContainer) View(iterFunc func(key []byte, value interface{}) error
 		bs, err := hex.DecodeString(kk)
 		if err != nil {
 			return err
+		}
+
+		// Do not view meta keys
+		if string(bs) == reservedNameKey {
+			continue
 		}
 
 		err = iterFunc(bs, v)

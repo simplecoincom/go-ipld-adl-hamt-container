@@ -157,5 +157,18 @@ func (hb hamtBuilder) Build() (HAMTContainer, error) {
 		newHAMTContainer.isLoaded = true
 	}
 
+	if newHAMTContainer.isLoaded {
+		key, err := newHAMTContainer.GetAsBytes([]byte(reservedNameKey))
+		if err != nil {
+			return nil, err
+		}
+		newHAMTContainer.key = key
+	}
+
+	err = newHAMTContainer.Set([]byte(reservedNameKey), newHAMTContainer.key)
+	if err != nil {
+		return nil, err
+	}
+
 	return &newHAMTContainer, nil
 }
