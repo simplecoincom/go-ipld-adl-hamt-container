@@ -1,15 +1,20 @@
 package hamtcontainer
 
 import (
+	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"sync"
 
 	"github.com/ipfs/go-cid"
+	gocar "github.com/ipld/go-car"
 	hamt "github.com/ipld/go-ipld-adl-hamt"
 	ipld "github.com/ipld/go-ipld-prime"
 	_ "github.com/ipld/go-ipld-prime/codec/dagcbor"
 	basicnode "github.com/ipld/go-ipld-prime/node/basic"
+	"github.com/ipld/go-ipld-prime/traversal/selector"
+	sbuilder "github.com/ipld/go-ipld-prime/traversal/selector/builder"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/utils"
 )
@@ -364,5 +369,36 @@ func (hc *hamtContainer) build() error {
 }
 
 func (hc *hamtContainer) GetCar() ([]byte, error) {
-	return nil, nil
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
+
+	ssb := sbuilder.NewSelectorSpecBuilder(basicnode.Prototype.Any)
+	selector := ssb.ExploreFields(func(efsb sbuilder.ExploreFieldsSpecBuilder) {
+		efsb.Insert("Links",
+			ssb.ExploreIndex(1, ssb.ExploreRecursive(selector.RecursionLimitNone(), ssb.ExploreAll(ssb.ExploreRecursiveEdge()))))
+	}).Node()
+
+	lnk, err := hc.GetLink()
+	if err != nil {
+		return nil, err
+	}
+
+	cid, err := cid.Parse(lnk.String())
+	if err != nil {
+		return nil, err
+	}
+
+	lsysStore := utils.ToReadStore(hc.linkSystem.StorageReadOpener)
+	sc := gocar.NewSelectiveCar(context.Background(), lsysStore, []gocar.Dag{{Root: cid, Selector: selector}})
+
+	buf := new(bytes.Buffer)
+	blockCount := 0
+	var oneStepBlocks []gocar.Block
+	err = sc.Write(buf, func(block gocar.Block) error {
+		oneStepBlocks = append(oneStepBlocks, block)
+		blockCount++
+		return nil
+	})
+
+	return buf.Bytes(), nil
 }
