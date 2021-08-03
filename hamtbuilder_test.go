@@ -10,6 +10,7 @@ import (
 func TestBuilderWithNoParams(t *testing.T) {
 	assert := assert.New(t)
 	builder := NewHAMTBuilder()
+
 	hamtContainer, err := builder.Build()
 	assert.Nil(err)
 	assert.NotNil(hamtContainer)

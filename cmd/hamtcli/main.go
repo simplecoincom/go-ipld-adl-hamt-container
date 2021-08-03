@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -42,7 +43,7 @@ var setKeyCmd = &cobra.Command{
 			return err
 		}
 
-		// Create the first HAMT
+		// Load HAMT from link
 		hamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: cid}).Build()
 		if err != nil {
 			return err
@@ -81,7 +82,7 @@ var getKeyCmd = &cobra.Command{
 			return err
 		}
 
-		// Create the first HAMT
+		// Load HAMT from link
 		hamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: cid}).Build()
 		if err != nil {
 			return err
@@ -89,6 +90,14 @@ var getKeyCmd = &cobra.Command{
 
 		v, err := hamt.GetAsString([]byte(key))
 		if err != nil {
+			if errors.Is(err, hamtcontainer.ErrHAMTFailedToGetAsString) {
+				v, err := hamt.GetAsLink([]byte(key))
+				if err != nil {
+					return err
+				}
+				fmt.Printf("HAMT %s result %s\n", string(hamt.Key()), v)
+				return nil
+			}
 			return err
 		}
 
@@ -98,8 +107,13 @@ var getKeyCmd = &cobra.Command{
 	},
 }
 
-var setHAMTCmd = &cobra.Command{
+var hamtCmd = &cobra.Command{
 	Use:   "hamt",
+	Short: "Manage hamt",
+}
+
+var newHAMTCmd = &cobra.Command{
+	Use:   "new",
 	Short: "Creates a new HAMT and return the link",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -123,11 +137,64 @@ var setHAMTCmd = &cobra.Command{
 	},
 }
 
+var setHAMTLinkCmd = &cobra.Command{
+	Use:   "link",
+	Short: "Creates nested bucket link",
+	Args:  cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		link := args[0]
+		childLink := args[1]
+
+		fmt.Println("parent child", args[:])
+
+		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+
+		parentCid, err := cid.Parse(link)
+		if err != nil {
+			return err
+		}
+
+		// Load the parent HAMT from link
+		parentHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: parentCid}).Build()
+		if err != nil {
+			return err
+		}
+
+		childCid, err := cid.Parse(childLink)
+		if err != nil {
+			return err
+		}
+
+		// Load the parent HAMT from link
+		childHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: childCid}).Build()
+		if err != nil {
+			return err
+		}
+
+		// Set the child hamt as key on parent hamt
+		err = parentHamt.Set(childHamt.Key(), childHamt)
+		if err != nil {
+			return err
+		}
+
+		parentHamtLink, err := parentHamt.GetLink()
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("HAMT %s link %s\n", string(parentHamt.Key()), parentHamtLink)
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(setKeyCmd)
 	rootCmd.AddCommand(getKeyCmd)
-	rootCmd.AddCommand(setHAMTCmd)
+	rootCmd.AddCommand(hamtCmd)
+
+	hamtCmd.AddCommand(setHAMTLinkCmd)
+	hamtCmd.AddCommand(newHAMTCmd)
 }
 
 func main() {

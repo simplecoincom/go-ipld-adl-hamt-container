@@ -28,7 +28,9 @@ var ErrHAMTFailedToLoadNested = errors.New("Failed to load link from nested HAMT
 var ErrHAMTAlreadyBuild = errors.New("HAMT already build")
 var ErrHAMTUnsupportedValueType = errors.New("Value type not supported")
 var ErrHAMTUnsupportedKeyType = errors.New("Key type not supported")
-var ErrHAMTFailedToGetAsLink = errors.New("Value returned should ipld.Link")
+var ErrHAMTFailedToGetAsLink = errors.New("Value returned should be ipld.Link")
+var ErrHAMTFailedToGetAsBytes = errors.New("Value returned should be Bytes")
+var ErrHAMTFailedToGetAsString = errors.New("Value returned should be String")
 
 // HAMTContainer is just a way to put together all HAMT needed structures in order to create a ipld.Node
 // which will represent the ipld-adl-hamt after the builder runs
@@ -80,14 +82,14 @@ type HAMTContainerParams struct {
 
 type hamtContainer struct {
 	HAMTContainerParams
-	mutex      sync.RWMutex
-	linkSystem ipld.LinkSystem
-	linkProto  ipld.LinkPrototype
-	assembler  ipld.MapAssembler
-	node       ipld.Node
-	cid        cid.Cid
-	builder    *hamt.Builder
-	isLoaded   bool
+	mutex       sync.RWMutex
+	linkSystem  ipld.LinkSystem
+	linkProto   ipld.LinkPrototype
+	assembler   ipld.MapAssembler
+	node        ipld.Node
+	cid         cid.Cid
+	builder     *hamt.Builder
+	shouldBuild bool
 }
 
 // Key returns the key that identifies the HAMT
@@ -222,7 +224,9 @@ func (hc *hamtContainer) Set(key []byte, value interface{}) error {
 		return ErrHAMTUnsupportedValueType
 	}
 
-	return nil
+	hc.shouldBuild = true
+
+	return hc.build()
 }
 
 // Get will return the value by the key
@@ -231,11 +235,9 @@ func (hc *hamtContainer) Get(key []byte) (interface{}, error) {
 	hc.mutex.Lock()
 	defer hc.mutex.Unlock()
 
-	if !hc.isLoaded {
-		// If auto build is enabled
-		if err := hc.build(); err != nil {
-			return nil, err
-		}
+	//Build before iterate
+	if err := hc.build(); err != nil {
+		return nil, err
 	}
 
 	valNode, err := hc.node.LookupByString(hex.EncodeToString(key))
@@ -281,7 +283,7 @@ func (hc *hamtContainer) GetAsBytes(key []byte) ([]byte, error) {
 	case []byte:
 		return result.([]byte), nil
 	default:
-		return nil, ErrHAMTFailedToGetAsLink
+		return nil, ErrHAMTFailedToGetAsBytes
 	}
 }
 
@@ -299,7 +301,7 @@ func (hc *hamtContainer) GetAsString(key []byte) (string, error) {
 	case string:
 		return r, nil
 	default:
-		return "", ErrHAMTFailedToGetAsLink
+		return "", ErrHAMTFailedToGetAsString
 	}
 }
 
@@ -342,6 +344,11 @@ func (hc *hamtContainer) build() error {
 	// build will build the HAMT internal representation inside the container
 	// It will have Link, and ipld.Node representing the HAMT also CID for the root content
 
+	// Build only if needed
+	if !hc.shouldBuild {
+		return nil
+	}
+
 	err := hc.assembler.Finish()
 	if err != nil {
 		return err
@@ -364,6 +371,8 @@ func (hc *hamtContainer) build() error {
 	if err != nil {
 		return err
 	}
+
+	hc.shouldBuild = false
 
 	return err
 }

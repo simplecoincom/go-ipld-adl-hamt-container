@@ -134,18 +134,16 @@ func (hb hamtBuilder) Build() (HAMTContainer, error) {
 
 	// If has a parent we should load from it
 	if hb.parentHAMTContainer != nil {
-
 		// If the key doesn't exists we should warn
 		link, err := hb.parentHAMTContainer.GetAsLink(hb.key)
 		if err != nil {
 			return nil, ErrHAMTNoNestedFound
 		}
+		newHAMTContainer.shouldBuild = false
 
 		if err := newHAMTContainer.LoadLink(link); err != nil {
 			return nil, ErrHAMTFailedToLoadNested
 		}
-
-		newHAMTContainer.isLoaded = true
 	}
 
 	// If has a link we should load from it
@@ -153,21 +151,14 @@ func (hb hamtBuilder) Build() (HAMTContainer, error) {
 		if err := newHAMTContainer.LoadLink(hb.link); err != nil {
 			return nil, err
 		}
-
-		newHAMTContainer.isLoaded = true
+		newHAMTContainer.shouldBuild = false
 	}
 
-	if newHAMTContainer.isLoaded {
-		key, err := newHAMTContainer.GetAsBytes([]byte(reservedNameKey))
+	if hb.parentHAMTContainer == nil || hb.link == nil {
+		err = newHAMTContainer.Set([]byte(reservedNameKey), newHAMTContainer.key)
 		if err != nil {
 			return nil, err
 		}
-		newHAMTContainer.key = key
-	}
-
-	err = newHAMTContainer.Set([]byte(reservedNameKey), newHAMTContainer.key)
-	if err != nil {
-		return nil, err
 	}
 
 	return &newHAMTContainer, nil

@@ -144,6 +144,7 @@ func TestNestedHAMTContainer(t *testing.T) {
 	// Load nested HAMT from parent HAMT
 	newHC, err := NewHAMTBuilder().Key([]byte("child")).FromNested(parentHAMT).Build()
 	assert.Nil(err)
+	assert.NotNil(newHC)
 
 	// Get value as string
 	val, err := newHC.GetAsString([]byte("foo"))
