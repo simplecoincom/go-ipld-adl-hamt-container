@@ -3,7 +3,6 @@ module github.com/simplecoincom/go-ipld-adl-hamt-container
 go 1.16
 
 require (
-	github.com/frankban/quicktest v1.13.0
 	github.com/go-redis/redis/v8 v8.11.1
 	github.com/ipfs/go-block-format v0.0.3
 	github.com/ipfs/go-cid v0.0.7
@@ -14,4 +13,5 @@ require (
 	github.com/multiformats/go-multicodec v0.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.2.1
+	github.com/stretchr/testify v1.7.0
 )

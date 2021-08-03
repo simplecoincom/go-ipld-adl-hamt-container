@@ -1,41 +1,53 @@
 package hamtcontainer
 
-// func TestBuilderWithNoParams(t *testing.T) {
-// 	builder := NewHAMTBuilder()
-// 	hamtContainer, err := builder.Build()
-// 	qt.Assert(t, err, qt.IsNil)
-// 	qt.Assert(t, string(hamtContainer.Key()), qt.Equals, "hamt")
-// }
+import (
+	"testing"
 
-// func TestBuilderWithKeyParam(t *testing.T) {
-// 	builder := NewHAMTBuilder().Key([]byte("root"))
-// 	hamtContainer, err := builder.Build()
-// 	qt.Assert(t, err, qt.IsNil)
-// 	qt.Assert(t, string(hamtContainer.Key()), qt.Equals, "root")
-// }
+	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
+	"github.com/stretchr/testify/assert"
+)
 
-// func TestBuilderWithStorageParam(t *testing.T) {
-// 	store := storage.NewMemoryStorage()
-// 	builder := NewHAMTBuilder().Storage(store)
-// 	hamtContainer, err := builder.Build()
-// 	qt.Assert(t, err, qt.IsNil)
-// 	qt.Assert(t, hamtContainer.Storage(), qt.Equals, store)
-// }
+func TestBuilderWithNoParams(t *testing.T) {
+	assert := assert.New(t)
+	builder := NewHAMTBuilder()
+	hamtContainer, err := builder.Build()
+	assert.Nil(err)
+	assert.NotNil(hamtContainer)
+	assert.Equal(string(hamtContainer.Key()), "hamt")
+}
 
-// func TestBuilderWithParentParam(t *testing.T) {
-// 	store := storage.NewMemoryStorage()
+func TestBuilderWithKeyParam(t *testing.T) {
+	assert := assert.New(t)
+	builder := NewHAMTBuilder().Key([]byte("root"))
+	hamtContainer, err := builder.Build()
+	assert.Nil(err)
+	assert.Equal(string(hamtContainer.Key()), "root")
+}
 
-// 	childContainer, err := NewHAMTBuilder().Storage(store).Key([]byte("child")).Build()
-// 	qt.Assert(t, err, qt.IsNil)
+func TestBuilderWithStorageParam(t *testing.T) {
+	assert := assert.New(t)
+	store := storage.NewMemoryStorage()
+	builder := NewHAMTBuilder().Storage(store)
+	hamtContainer, err := builder.Build()
+	assert.Nil(err)
+	assert.Equal(hamtContainer.Storage(), store)
+}
 
-// 	parentContainer, err := NewHAMTBuilder().Storage(store).Key([]byte("parent")).Build()
-// 	qt.Assert(t, err, qt.IsNil)
+func TestBuilderWithParentParam(t *testing.T) {
+	assert := assert.New(t)
+	store := storage.NewMemoryStorage()
 
-// 	err = parentContainer.Set([]byte("child"), childContainer)
-// 	qt.Assert(t, err, qt.IsNil)
+	childContainer, err := NewHAMTBuilder().Storage(store).Key([]byte("child")).Build()
+	assert.Nil(err)
 
-// 	newContainer, err := NewHAMTBuilder().Key([]byte("child")).FromNested(parentContainer).Build()
-// 	qt.Assert(t, err, qt.IsNil)
-// 	qt.Assert(t, newContainer, qt.IsNotNil)
-// 	qt.Assert(t, newContainer.Parent(), qt.Equals, parentContainer)
-// }
+	parentContainer, err := NewHAMTBuilder().Storage(store).Key([]byte("parent")).Build()
+	assert.Nil(err)
+
+	err = parentContainer.Set([]byte("child"), childContainer)
+	assert.Nil(err)
+
+	newContainer, err := NewHAMTBuilder().Key([]byte("child")).FromNested(parentContainer).Build()
+	assert.Nil(err)
+	assert.NotNil(newContainer)
+	assert.Equal(newContainer.Parent(), parentContainer)
+}

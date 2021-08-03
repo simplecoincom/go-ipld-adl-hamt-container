@@ -4,16 +4,18 @@ import (
 	"os"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
 	"github.com/ipfs/go-cid"
 	"github.com/ipld/go-ipld-prime"
 	"github.com/ipld/go-ipld-prime/fluent"
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	basicnode "github.com/ipld/go-ipld-prime/node/basic"
 	"github.com/multiformats/go-multicodec"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStorageRedisWrite(t *testing.T) {
+	assert := assert.New(t)
+
 	_, ok := os.LookupEnv("SHOULD_TEST_REDIS")
 	if !ok {
 		return
@@ -60,14 +62,16 @@ func TestStorageRedisWrite(t *testing.T) {
 		lp,                 // The LinkPrototype says what codec and hashing to use.
 		n,                  // And here's our data.
 	)
-	qt.Assert(t, err, qt.IsNil)
+	assert.Nil(err)
 
 	// That's it!  We got a link.
 	_, err = cid.Parse(lnk.String())
-	qt.Assert(t, err, qt.IsNil)
+	assert.Nil(err)
 }
 
 func TestStorageRedisLoad(t *testing.T) {
+	assert := assert.New(t)
+
 	_, ok := os.LookupEnv("SHOULD_TEST_REDIS")
 	if !ok {
 		return
@@ -113,7 +117,7 @@ func TestStorageRedisLoad(t *testing.T) {
 		lp,                 // The LinkPrototype says what codec and hashing to use.
 		n,                  // And here's our data.
 	)
-	qt.Assert(t, err, qt.IsNil)
+	assert.Nil(err)
 
 	// Let's say we want to load this link (it's the same one we just created in the example above).
 	cid, _ := cid.Decode("bafyrgqhai26anf3i7pips7q22coa4sz2fr4gk4q4sqdtymvvjyginfzaqewveaeqdh524nsktaq43j65v22xxrybrtertmcfxufdam3da3hbk")
@@ -141,5 +145,5 @@ func TestStorageRedisLoad(t *testing.T) {
 		lnk,                // The Link we want to load!
 		np,                 // The NodePrototype says what kind of Node we want as a result.
 	)
-	qt.Assert(t, err, qt.IsNil)
+	assert.Nil(err)
 }
