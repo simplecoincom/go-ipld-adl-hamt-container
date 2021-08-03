@@ -49,12 +49,12 @@ var setKeyCmd = &cobra.Command{
 			return err
 		}
 
-		for i := 0; i < len(kvs); i += 2 {
-			err = hamt.Set([]byte(kvs[i]), []byte(kvs[i+1]))
-			if err != nil {
-				return err
-			}
-		}
+		// for i := 0; i < len(kvs); i += 2 {
+		// 	err = hamt.Set([]byte(kvs[i]), []byte(kvs[i+1]))
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// }
 
 		lnk, err := hamt.GetLink()
 		if err != nil {
@@ -144,6 +144,7 @@ var setHAMTLinkCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		link := args[0]
 		childLink := args[1]
+		_ = childLink
 
 		fmt.Println("parent child", args[:])
 
@@ -160,22 +161,22 @@ var setHAMTLinkCmd = &cobra.Command{
 			return err
 		}
 
-		childCid, err := cid.Parse(childLink)
-		if err != nil {
-			return err
-		}
+		// childCid, err := cid.Parse(childLink)
+		// if err != nil {
+		// 	return err
+		// }
 
 		// Load the parent HAMT from link
-		childHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: childCid}).Build()
-		if err != nil {
-			return err
-		}
+		// childHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: childCid}).Build()
+		// if err != nil {
+		// 	return err
+		// }
 
 		// Set the child hamt as key on parent hamt
-		err = parentHamt.Set(childHamt.Key(), childHamt)
-		if err != nil {
-			return err
-		}
+		// err = parentHamt.Set(childHamt.Key(), childHamt)
+		// if err != nil {
+		// 	return err
+		// }
 
 		parentHamtLink, err := parentHamt.GetLink()
 		if err != nil {

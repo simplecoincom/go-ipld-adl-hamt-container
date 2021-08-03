@@ -3,6 +3,7 @@ package hamtcontainer
 import (
 	"testing"
 
+	ipld "github.com/ipld/go-ipld-prime"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 	"github.com/stretchr/testify/assert"
 )
@@ -40,15 +41,21 @@ func TestBuilderWithParentParam(t *testing.T) {
 
 	childContainer, err := NewHAMTBuilder().Storage(store).Key([]byte("child")).Build()
 	assert.Nil(err)
+	assert.NotNil(childContainer)
+
+	assert.Nil(childContainer.Must(func(assembler ipld.MapAssembler) error {
+		return childContainer.Set(assembler, []byte("foo"), "bar")
+	}))
 
 	parentContainer, err := NewHAMTBuilder().Storage(store).Key([]byte("parent")).Build()
 	assert.Nil(err)
+	assert.NotNil(parentContainer)
 
-	err = parentContainer.Set([]byte("child"), childContainer)
-	assert.Nil(err)
+	assert.Nil(parentContainer.Must(func(assembler ipld.MapAssembler) error {
+		return parentContainer.Set(assembler, []byte("child"), childContainer)
+	}))
 
 	newContainer, err := NewHAMTBuilder().Key([]byte("child")).FromNested(parentContainer).Build()
 	assert.Nil(err)
 	assert.NotNil(newContainer)
-	assert.Equal(newContainer.Parent(), parentContainer)
 }

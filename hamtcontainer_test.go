@@ -18,7 +18,9 @@ func TestHAMTContainerWithString(t *testing.T) {
 	assert.Nil(err)
 
 	// Set some k/v
-	assert.Nil(rootHAMT.Set([]byte("foo"), "bar"))
+	assert.Nil(rootHAMT.Must(func(assembler ipld.MapAssembler) error {
+		return rootHAMT.Set(assembler, []byte("foo"), "bar")
+	}))
 
 	// Get node value as string
 	val, err := rootHAMT.GetAsString([]byte("foo"))
@@ -42,8 +44,13 @@ func TestHAMTContainerViewIterator(t *testing.T) {
 	assert.Nil(err)
 
 	// Set some k/v
-	assert.Nil(rootHAMT.Set([]byte("foo"), "bar"))
-	assert.Nil(rootHAMT.Set([]byte("zoo"), "zar"))
+	assert.Nil(rootHAMT.Must(func(assembler ipld.MapAssembler) error {
+		if err := rootHAMT.Set(assembler, []byte("foo"), "bar"); err != nil {
+			return err
+		}
+
+		return rootHAMT.Set(assembler, []byte("zoo"), "zar")
+	}))
 
 	// Get node value as string
 	val, err := rootHAMT.GetAsString([]byte("foo"))
@@ -72,7 +79,9 @@ func TestHAMTContainerWithBytes(t *testing.T) {
 	assert.Nil(err)
 
 	// Set some k/v
-	assert.Nil(rootHAMT.Set([]byte("foo"), []byte("bar")))
+	assert.Nil(rootHAMT.Must(func(assembler ipld.MapAssembler) error {
+		return rootHAMT.Set(assembler, []byte("foo"), []byte("bar"))
+	}))
 
 	// Get node value as string
 	val, err := rootHAMT.GetAsBytes([]byte("foo"))
@@ -100,7 +109,9 @@ func TestHAMTContainerWithIPFS(t *testing.T) {
 	assert.Nil(err)
 
 	// Set some k/v
-	assert.Nil(rootHAMT.Set([]byte("foo"), []byte("bar")))
+	assert.Nil(rootHAMT.Must(func(assembler ipld.MapAssembler) error {
+		return rootHAMT.Set(assembler, []byte("foo"), []byte("bar"))
+	}))
 
 	// Get node value as string
 	val, err := rootHAMT.GetAsBytes([]byte("foo"))
@@ -127,19 +138,23 @@ func TestNestedHAMTContainer(t *testing.T) {
 
 	// Create the first HAMT
 	childHAMT, err := NewHAMTBuilder().Key([]byte("child")).Storage(store).Build()
+	assert.NotNil(childHAMT)
 	assert.Nil(err)
 
 	// Set some k/v
-	err = childHAMT.Set([]byte("foo"), "bar")
-	assert.Nil(err)
+	assert.Nil(childHAMT.Must(func(assembler ipld.MapAssembler) error {
+		return childHAMT.Set(assembler, []byte("foo"), "bar")
+	}))
 
 	// Creates the parent HAMT
 	parentHAMT, err := NewHAMTBuilder().Key([]byte("parent")).Storage(store).Build()
+	assert.NotNil(parentHAMT)
 	assert.Nil(err)
 
 	// Put the child HAMT as values of the parent HAMT
-	err = parentHAMT.Set([]byte("child"), childHAMT)
-	assert.Nil(err)
+	assert.Nil(parentHAMT.Must(func(assembler ipld.MapAssembler) error {
+		return parentHAMT.Set(assembler, []byte("child"), childHAMT)
+	}))
 
 	// Load nested HAMT from parent HAMT
 	newHC, err := NewHAMTBuilder().Key([]byte("child")).FromNested(parentHAMT).Build()
