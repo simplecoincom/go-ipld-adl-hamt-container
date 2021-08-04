@@ -1,10 +1,10 @@
 package hamtcontainer
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
+	"io"
 	"sync"
 
 	"github.com/ipfs/go-cid"
@@ -317,22 +317,22 @@ func (hc *HAMTContainer) View(iterFunc func(key []byte, value interface{}) error
 	return nil
 }
 
-func (hc *HAMTContainer) GetCar() ([]byte, error) {
+func (hc *HAMTContainer) WriteCar(writer io.Writer) error {
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()
 
 	if hc.node == nil {
-		return nil, ErrHAMTNotBuild
+		return ErrHAMTNotBuild
 	}
 
 	lnk, err := hc.GetLink()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	cid, err := cid.Parse(lnk.String())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ssb := sbuilder.NewSelectorSpecBuilder(basicnode.Prototype.Any)
@@ -344,16 +344,11 @@ func (hc *HAMTContainer) GetCar() ([]byte, error) {
 	lsysStore := utils.ToReadStore(hc.linkSystem.StorageReadOpener)
 	sc := gocar.NewSelectiveCar(context.Background(), lsysStore, []gocar.Dag{{Root: cid, Selector: selector}})
 
-	buf := new(bytes.Buffer)
 	blockCount := 0
 	var oneStepBlocks []gocar.Block
-	if err := sc.Write(buf, func(block gocar.Block) error {
+	return sc.Write(writer, func(block gocar.Block) error {
 		oneStepBlocks = append(oneStepBlocks, block)
 		blockCount++
 		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
+	})
 }

@@ -213,13 +213,10 @@ func main() {
 		panic(err)
 	}
 
-	bs, err := rootHAMT.GetCar()
-	if err != nil {
-		panic(err)
-	}
+	f, err := os.Create("/tmp/files.car")
 
-	// Write the car file to disk
-	if err := ioutil.WriteFile("/tmp/file.car", bs, 0644); err != nil {
+	err = rootHAMT.WriteCar(f)
+	if err != nil {
 		panic(err)
 	}
 }
