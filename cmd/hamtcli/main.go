@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -42,17 +43,22 @@ var setKeyCmd = &cobra.Command{
 			return err
 		}
 
-		// Create the first HAMT
+		// Load HAMT from link
 		hamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: cid}).Build()
 		if err != nil {
 			return err
 		}
 
-		for i := 0; i < len(kvs); i += 2 {
-			err = hamt.Set([]byte(kvs[i]), []byte(kvs[i+1]))
-			if err != nil {
-				return err
+		if err := hamt.MustBuild(func(hamtSetter hamtcontainer.HAMTSetter) error {
+			for i := 0; i < len(kvs); i += 2 {
+				if err := hamtSetter.Set([]byte(kvs[i]), []byte(kvs[i+1])); err != nil {
+					return err
+				}
 			}
+
+			return nil
+		}); err != nil {
+			return err
 		}
 
 		lnk, err := hamt.GetLink()
@@ -81,7 +87,7 @@ var getKeyCmd = &cobra.Command{
 			return err
 		}
 
-		// Create the first HAMT
+		// Load HAMT from link
 		hamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: cid}).Build()
 		if err != nil {
 			return err
@@ -89,6 +95,14 @@ var getKeyCmd = &cobra.Command{
 
 		v, err := hamt.GetAsString([]byte(key))
 		if err != nil {
+			if errors.Is(err, hamtcontainer.ErrHAMTFailedToGetAsString) {
+				v, err := hamt.GetAsLink([]byte(key))
+				if err != nil {
+					return err
+				}
+				fmt.Printf("HAMT %s result %s\n", string(hamt.Key()), v)
+				return nil
+			}
 			return err
 		}
 
@@ -98,8 +112,13 @@ var getKeyCmd = &cobra.Command{
 	},
 }
 
-var setHAMTCmd = &cobra.Command{
+var hamtCmd = &cobra.Command{
 	Use:   "hamt",
+	Short: "Manage hamt",
+}
+
+var newHAMTCmd = &cobra.Command{
+	Use:   "new",
 	Short: "Creates a new HAMT and return the link",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,6 +132,10 @@ var setHAMTCmd = &cobra.Command{
 			return err
 		}
 
+		if err := hamt.MustBuild(); err != nil {
+			return err
+		}
+
 		link, err := hamt.GetLink()
 		if err != nil {
 			return err
@@ -123,11 +146,66 @@ var setHAMTCmd = &cobra.Command{
 	},
 }
 
+var setHAMTLinkCmd = &cobra.Command{
+	Use:   "link",
+	Short: "Creates nested bucket link",
+	Args:  cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		link := args[0]
+		childLink := args[1]
+
+		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+
+		parentCid, err := cid.Parse(link)
+		if err != nil {
+			return err
+		}
+
+		// Load the parent HAMT from link
+		parentHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: parentCid}).Build()
+		if err != nil {
+			return err
+		}
+
+		childCid, err := cid.Parse(childLink)
+		if err != nil {
+			return err
+		}
+
+		// Load the parent HAMT from link
+		childHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: childCid}).Build()
+		if err != nil {
+			return err
+		}
+
+		if err := parentHamt.MustBuild(func(hamtSetter hamtcontainer.HAMTSetter) error {
+			return hamtSetter.Set(childHamt.Key(), childHamt)
+		}); err != nil {
+			return err
+		}
+
+		if err := childHamt.MustBuild(); err != nil {
+			return err
+		}
+
+		parentHamtLink, err := parentHamt.GetLink()
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("HAMT %s link %s\n", string(parentHamt.Key()), parentHamtLink)
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(setKeyCmd)
 	rootCmd.AddCommand(getKeyCmd)
-	rootCmd.AddCommand(setHAMTCmd)
+	rootCmd.AddCommand(hamtCmd)
+
+	hamtCmd.AddCommand(setHAMTLinkCmd)
+	hamtCmd.AddCommand(newHAMTCmd)
 }
 
 func main() {

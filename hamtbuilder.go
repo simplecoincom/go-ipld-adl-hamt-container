@@ -4,7 +4,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/ipfs/go-cid"
-	hamt "github.com/ipld/go-ipld-adl-hamt"
 	ipld "github.com/ipld/go-ipld-prime"
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	"github.com/multiformats/go-multicodec"
@@ -14,54 +13,43 @@ import (
 var ErrCantUseStorageAndNested = errors.New("Cannot use Storage and FromNested in the same build")
 var ErrCantUseParentAndLink = errors.New("Cannot use Parant and Link in the same build")
 
-type HAMTBuilder interface {
-	// KeyAsByte sets the identification of the ipld-adl-hamt, it's like id, but there's no guarantee to have a
-	// nested ipld-adl-hamt with the same key
-	Key(key []byte) HAMTBuilder
-	// Storage sets the underline storage used to store ipld-adl-hamt structure
-	Storage(storage storage.Storage) HAMTBuilder
-	// FromNested creates a new HAMTContainer from parent HAMTContainer
-	FromNested(parent HAMTContainer) HAMTBuilder
-	// FromLink tries to creates a new HAMTContainer from the given link
-	FromLink(lnk ipld.Link) HAMTBuilder
-	// Build creates the HAMTContainer based on the parameters passed on builder functions
-	Build() (HAMTContainer, error)
-}
-
-type hamtBuilder struct {
-	HAMTContainerParams
+type HAMTBuilder struct {
+	key                 []byte
+	storage             storage.Storage
+	link                ipld.Link
+	parentHAMTContainer *HAMTContainer
 }
 
 // NewHAMTBuilder create a new HAMTBuilder helper
 func NewHAMTBuilder() HAMTBuilder {
-	return &hamtBuilder{}
+	return HAMTBuilder{}
 }
 
 // Key sets the key for the future HAMTContainer
-func (hb *hamtBuilder) Key(key []byte) HAMTBuilder {
+func (hb HAMTBuilder) Key(key []byte) HAMTBuilder {
 	hb.key = key
 	return hb
 }
 
 // Storage sets the storage for the future HAMTContainer
-func (hb *hamtBuilder) Storage(storage storage.Storage) HAMTBuilder {
+func (hb HAMTBuilder) Storage(storage storage.Storage) HAMTBuilder {
 	hb.storage = storage
 	return hb
 }
 
 // FromLink sets the link for the future HAMTContainer
-func (hb *hamtBuilder) FromLink(link ipld.Link) HAMTBuilder {
+func (hb HAMTBuilder) FromLink(link ipld.Link) HAMTBuilder {
 	hb.link = link
 	return hb
 }
 
 // FromNested sets the parent container to load from the future HAMTContainer
-func (hb *hamtBuilder) FromNested(parent HAMTContainer) HAMTBuilder {
+func (hb HAMTBuilder) FromNested(parent *HAMTContainer) HAMTBuilder {
 	hb.parentHAMTContainer = parent
 	return hb
 }
 
-func (hb *hamtBuilder) parseParamRules() error {
+func (hb *HAMTBuilder) parseParamRules() error {
 	// Should parse params and helps with some rules
 
 	// Storage and parent Storage should not be use in the same time
@@ -94,17 +82,14 @@ func (hb *hamtBuilder) parseParamRules() error {
 }
 
 // Build creates the HAMT Container based on the params from HAMTBuilder
-func (hb hamtBuilder) Build() (HAMTContainer, error) {
+func (hb HAMTBuilder) Build() (*HAMTContainer, error) {
 	if err := hb.parseParamRules(); err != nil {
 		return nil, err
 	}
 
-	newHAMTContainer := hamtContainer{
-		HAMTContainerParams: HAMTContainerParams{
-			key:                 hb.key,
-			storage:             hb.storage,
-			parentHAMTContainer: hb.parentHAMTContainer,
-		},
+	newHAMTContainer := &HAMTContainer{
+		key:     hb.key,
+		storage: hb.storage,
 	}
 
 	// Sets the link system
@@ -120,18 +105,6 @@ func (hb hamtBuilder) Build() (HAMTContainer, error) {
 	newHAMTContainer.linkSystem.StorageWriteOpener = newHAMTContainer.storage.OpenWrite
 	newHAMTContainer.linkSystem.StorageReadOpener = newHAMTContainer.storage.OpenRead
 
-	// Creates the builder for the HAMT
-	newHAMTContainer.builder = hamt.NewBuilder(hamt.Prototype{BitWidth: 3, BucketSize: 64}).
-		WithLinking(newHAMTContainer.linkSystem, newHAMTContainer.linkProto)
-
-	var err error
-
-	// Sets the assembler to build the k/v for the map structure
-	newHAMTContainer.assembler, err = newHAMTContainer.builder.BeginMap(0)
-	if err != nil {
-		return nil, err
-	}
-
 	// If has a parent we should load from it
 	if hb.parentHAMTContainer != nil {
 
@@ -144,20 +117,16 @@ func (hb hamtBuilder) Build() (HAMTContainer, error) {
 		if err := newHAMTContainer.LoadLink(link); err != nil {
 			return nil, ErrHAMTFailedToLoadNested
 		}
-
-		newHAMTContainer.isLoaded = true
 	}
 
-	// If has a link we should load from it
 	if hb.link != nil {
 		if err := newHAMTContainer.LoadLink(hb.link); err != nil {
 			return nil, err
 		}
-
-		newHAMTContainer.isLoaded = true
 	}
 
-	if newHAMTContainer.isLoaded {
+	// If has a link we should load from it
+	if hb.parentHAMTContainer != nil || hb.link != nil {
 		key, err := newHAMTContainer.GetAsBytes([]byte(reservedNameKey))
 		if err != nil {
 			return nil, err
@@ -165,10 +134,5 @@ func (hb hamtBuilder) Build() (HAMTContainer, error) {
 		newHAMTContainer.key = key
 	}
 
-	err = newHAMTContainer.Set([]byte(reservedNameKey), newHAMTContainer.key)
-	if err != nil {
-		return nil, err
-	}
-
-	return &newHAMTContainer, nil
+	return newHAMTContainer, nil
 }

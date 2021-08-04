@@ -3,7 +3,6 @@ package storage
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
 	"github.com/ipfs/go-cid"
 	"github.com/ipld/go-ipld-prime"
 	_ "github.com/ipld/go-ipld-prime/codec/dagcbor"
@@ -11,9 +10,12 @@ import (
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	basicnode "github.com/ipld/go-ipld-prime/node/basic"
 	"github.com/multiformats/go-multicodec"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStorageMemoryWrite(t *testing.T) {
+	assert := assert.New(t)
+
 	// Let's get a LinkSystem.  We're going to be working with CID links,
 	//  so let's get the default LinkSystem that's ready to work with those.
 	lsys := cidlink.DefaultLinkSystem()
@@ -50,11 +52,11 @@ func TestStorageMemoryWrite(t *testing.T) {
 		lp,                 // The LinkPrototype says what codec and hashing to use.
 		n,                  // And here's our data.
 	)
-	qt.Assert(t, err, qt.IsNil)
+	assert.Nil(err)
 
 	// That's it!  We got a link.
 	_, err = cid.Parse(lnk.String())
-	qt.Assert(t, err, qt.IsNil)
+	assert.Nil(err)
 
 	// And we need some data to link to!  Here's a quick piece of example data:
 	n2 := fluent.MustBuildMap(basicnode.Prototype.Map, 1, func(na fluent.MapAssembler) {
@@ -67,11 +69,13 @@ func TestStorageMemoryWrite(t *testing.T) {
 		lp,                 // The LinkPrototype says what codec and hashing to use.
 		n2,                 // And here's our data.
 	)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, lnk, qt.Not(qt.Equals), lnk2)
+	assert.Nil(err)
+	assert.NotEqual(lnk, lnk2)
 }
 
 func TestStorageMemoryLoad(t *testing.T) {
+	assert := assert.New(t)
+
 	// Let's get a LinkSystem.  We're going to be working with CID links,
 	//  so let's get the default LinkSystem that's ready to work with those.
 	lsys := cidlink.DefaultLinkSystem()
@@ -108,7 +112,7 @@ func TestStorageMemoryLoad(t *testing.T) {
 		lp,                 // The LinkPrototype says what codec and hashing to use.
 		n,                  // And here's our data.
 	)
-	qt.Assert(t, err, qt.IsNil)
+	assert.Nil(err)
 
 	// Let's say we want to load this link (it's the same one we just created in the example above).
 	cid, _ := cid.Decode("bafyrgqhai26anf3i7pips7q22coa4sz2fr4gk4q4sqdtymvvjyginfzaqewveaeqdh524nsktaq43j65v22xxrybrtertmcfxufdam3da3hbk")
@@ -136,5 +140,5 @@ func TestStorageMemoryLoad(t *testing.T) {
 		lnk,                // The Link we want to load!
 		np,                 // The NodePrototype says what kind of Node we want as a result.
 	)
-	qt.Assert(t, err, qt.IsNil)
+	assert.Nil(err)
 }
