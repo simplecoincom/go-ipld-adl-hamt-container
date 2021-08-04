@@ -191,14 +191,13 @@ func main() {
 import (
 	"fmt"
 
-	ipfsApi "github.com/ipfs/go-ipfs-api"
 	hamtcontainer "github.com/simplecoincom/go-ipld-adl-hamt-container"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
 )
 
 func main() {
-	// Linking the data with IPFS
-	store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+		// Linking the data into a Redis storage
+	store := storage.NewRedisStorage("localhost:6379", "")
 
 	// Create the root HAMT container
 	rootHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
