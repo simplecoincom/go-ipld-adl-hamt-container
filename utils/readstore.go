@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"io/ioutil"
 
 	blocks "github.com/ipfs/go-block-format"
@@ -15,7 +16,9 @@ type readStore ipld.BlockReadOpener
 
 func (rs readStore) Get(c cid.Cid) (blocks.Block, error) {
 	link := cidlink.Link{Cid: c}
-	r, err := rs(ipld.LinkContext{}, link)
+	r, err := rs(ipld.LinkContext{
+		Ctx: context.Background(),
+	}, link)
 	if err != nil {
 		return nil, err
 	}
