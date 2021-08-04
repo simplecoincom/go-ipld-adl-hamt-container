@@ -25,19 +25,10 @@ var ErrHAMTNotBuild = errors.New("HAMT not ready, build first")
 var ErrHAMTValueNotFound = errors.New("Value not found at HAMT")
 var ErrHAMTNoNestedFound = errors.New("No nested found with the given key")
 var ErrHAMTFailedToLoadNested = errors.New("Failed to load link from nested HAMT")
-var ErrHAMTAlreadyBuild = errors.New("HAMT already build")
 var ErrHAMTUnsupportedValueType = errors.New("Unsupported value")
-var ErrHAMTUnsupportedKeyType = errors.New("Key type not supported")
 var ErrHAMTFailedToGetAsLink = errors.New("Value returned should be ipld.Link")
 var ErrHAMTFailedToGetAsBytes = errors.New("Value returned should be Bytes")
 var ErrHAMTFailedToGetAsString = errors.New("Value returned should be String")
-
-type HAMTContainerParams struct {
-	key                 []byte
-	storage             storage.Storage
-	link                ipld.Link
-	parentHAMTContainer *HAMTContainer
-}
 
 type HAMTContainer struct {
 	mutex      sync.RWMutex
@@ -47,7 +38,10 @@ type HAMTContainer struct {
 	linkSystem ipld.LinkSystem
 	linkProto  ipld.LinkPrototype
 	node       ipld.Node
-	cid        cid.Cid
+}
+
+type HAMTSetter struct {
+	assembler ipld.MapAssembler
 }
 
 // Key returns the key that identifies the HAMT
@@ -69,6 +63,11 @@ func (hc *HAMTContainer) Storage() storage.Storage {
 func (hc *HAMTContainer) CID() (cid.Cid, error) {
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()
+
+	if hc.link == nil {
+		return cid.Cid{}, ErrHAMTNotBuild
+	}
+
 	return cid.Parse(hc.link.String())
 }
 
@@ -77,6 +76,11 @@ func (hc *HAMTContainer) CID() (cid.Cid, error) {
 func (hc *HAMTContainer) GetLink() (ipld.Link, error) {
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()
+
+	if hc.link == nil {
+		return nil, ErrHAMTNotBuild
+	}
+
 	return hc.link, nil
 }
 
@@ -103,8 +107,8 @@ func (hc *HAMTContainer) LoadLink(link ipld.Link) error {
 	return nil
 }
 
-// Must is used to build the key maps
-func (hc *HAMTContainer) Must(assemblyFunc func(assembler ipld.MapAssembler) error) error {
+// MustBuild is used to build the key maps
+func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) error) error {
 	hc.mutex.Lock()
 	defer hc.mutex.Unlock()
 
@@ -125,8 +129,10 @@ func (hc *HAMTContainer) Must(assemblyFunc func(assembler ipld.MapAssembler) err
 		return err
 	}
 
-	if err := assemblyFunc(assembler); err != nil {
-		return err
+	for _, assemblyFunc := range assemblyFuncs {
+		if err := assemblyFunc(HAMTSetter{assembler}); err != nil {
+			return err
+		}
 	}
 
 	if err := assembler.Finish(); err != nil {
@@ -152,23 +158,23 @@ func (hc *HAMTContainer) Must(assemblyFunc func(assembler ipld.MapAssembler) err
 // Set adds a new k/v content for the HAMT
 // For string values it will add k/v pair of strings
 // For ipld.Link values it will add string key and a link for another HAMT structure as value
-func (hc *HAMTContainer) Set(assembler ipld.MapAssembler, key []byte, value interface{}) error {
-	if err := assembler.AssembleKey().AssignString(hex.EncodeToString([]byte(key))); err != nil {
+func (hs *HAMTSetter) Set(key []byte, value interface{}) error {
+	if err := hs.assembler.AssembleKey().AssignString(hex.EncodeToString([]byte(key))); err != nil {
 		return err
 	}
 
 	// Support types for value
 	switch v := value.(type) {
 	case string:
-		if err := assembler.AssembleValue().AssignString(v); err != nil {
+		if err := hs.assembler.AssembleValue().AssignString(v); err != nil {
 			return err
 		}
 	case []byte:
-		if err := assembler.AssembleValue().AssignBytes(v); err != nil {
+		if err := hs.assembler.AssembleValue().AssignBytes(v); err != nil {
 			return err
 		}
 	case ipld.Link:
-		if err := assembler.AssembleValue().AssignLink(v); err != nil {
+		if err := hs.assembler.AssembleValue().AssignLink(v); err != nil {
 			return err
 		}
 	case *HAMTContainer:
@@ -177,7 +183,7 @@ func (hc *HAMTContainer) Set(assembler ipld.MapAssembler, key []byte, value inte
 			return err
 		}
 
-		if err := assembler.AssembleValue().AssignLink(link); err != nil {
+		if err := hs.assembler.AssembleValue().AssignLink(link); err != nil {
 			return err
 		}
 	case HAMTContainer:
@@ -186,7 +192,7 @@ func (hc *HAMTContainer) Set(assembler ipld.MapAssembler, key []byte, value inte
 			return err
 		}
 
-		if err := assembler.AssembleValue().AssignLink(link); err != nil {
+		if err := hs.assembler.AssembleValue().AssignLink(link); err != nil {
 			return err
 		}
 	default:
@@ -201,6 +207,10 @@ func (hc *HAMTContainer) Set(assembler ipld.MapAssembler, key []byte, value inte
 func (hc *HAMTContainer) Get(key []byte) (interface{}, error) {
 	hc.mutex.Lock()
 	defer hc.mutex.Unlock()
+
+	if hc.node == nil {
+		return nil, ErrHAMTNotBuild
+	}
 
 	valNode, err := hc.node.LookupByString(hex.EncodeToString(key))
 	if err != nil {
@@ -269,22 +279,27 @@ func (hc *HAMTContainer) GetAsString(key []byte) (string, error) {
 
 // View will iterate over each item key map
 func (hc *HAMTContainer) View(iterFunc func(key []byte, value interface{}) error) error {
-	hc.mutex.Lock()
-	defer hc.mutex.Unlock()
+	hc.mutex.RLock()
+	defer hc.mutex.RUnlock()
 
-	iter := hc.node.MapIterator()
-	for !iter.Done() {
-		k, v, err := iter.Next()
+	if hc.node == nil {
+		return ErrHAMTNotBuild
+	}
+
+	mapIter := hc.node.MapIterator()
+
+	for !mapIter.Done() {
+		key, value, err := mapIter.Next()
 		if err != nil {
 			return err
 		}
 
-		kk, err := k.AsString()
+		ks, err := key.AsString()
 		if err != nil {
 			return err
 		}
 
-		bs, err := hex.DecodeString(kk)
+		bs, err := hex.DecodeString(ks)
 		if err != nil {
 			return err
 		}
@@ -294,11 +309,11 @@ func (hc *HAMTContainer) View(iterFunc func(key []byte, value interface{}) error
 			continue
 		}
 
-		err = iterFunc(bs, v)
-		if err != nil {
+		if err := iterFunc(bs, value); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -306,11 +321,9 @@ func (hc *HAMTContainer) GetCar() ([]byte, error) {
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()
 
-	ssb := sbuilder.NewSelectorSpecBuilder(basicnode.Prototype.Any)
-	selector := ssb.ExploreFields(func(efsb sbuilder.ExploreFieldsSpecBuilder) {
-		efsb.Insert("Links",
-			ssb.ExploreIndex(1, ssb.ExploreRecursive(selector.RecursionLimitNone(), ssb.ExploreAll(ssb.ExploreRecursiveEdge()))))
-	}).Node()
+	if hc.node == nil {
+		return nil, ErrHAMTNotBuild
+	}
 
 	lnk, err := hc.GetLink()
 	if err != nil {
@@ -322,17 +335,25 @@ func (hc *HAMTContainer) GetCar() ([]byte, error) {
 		return nil, err
 	}
 
+	ssb := sbuilder.NewSelectorSpecBuilder(basicnode.Prototype.Any)
+	selector := ssb.ExploreFields(func(efsb sbuilder.ExploreFieldsSpecBuilder) {
+		efsb.Insert("Links",
+			ssb.ExploreIndex(1, ssb.ExploreRecursive(selector.RecursionLimitNone(), ssb.ExploreAll(ssb.ExploreRecursiveEdge()))))
+	}).Node()
+
 	lsysStore := utils.ToReadStore(hc.linkSystem.StorageReadOpener)
 	sc := gocar.NewSelectiveCar(context.Background(), lsysStore, []gocar.Dag{{Root: cid, Selector: selector}})
 
 	buf := new(bytes.Buffer)
 	blockCount := 0
 	var oneStepBlocks []gocar.Block
-	err = sc.Write(buf, func(block gocar.Block) error {
+	if err := sc.Write(buf, func(block gocar.Block) error {
 		oneStepBlocks = append(oneStepBlocks, block)
 		blockCount++
 		return nil
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	return buf.Bytes(), nil
 }

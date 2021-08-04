@@ -14,7 +14,10 @@ var ErrCantUseStorageAndNested = errors.New("Cannot use Storage and FromNested i
 var ErrCantUseParentAndLink = errors.New("Cannot use Parant and Link in the same build")
 
 type HAMTBuilder struct {
-	HAMTContainerParams
+	key                 []byte
+	storage             storage.Storage
+	link                ipld.Link
+	parentHAMTContainer *HAMTContainer
 }
 
 // NewHAMTBuilder create a new HAMTBuilder helper

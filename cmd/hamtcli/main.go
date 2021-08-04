@@ -49,12 +49,17 @@ var setKeyCmd = &cobra.Command{
 			return err
 		}
 
-		// for i := 0; i < len(kvs); i += 2 {
-		// 	err = hamt.Set([]byte(kvs[i]), []byte(kvs[i+1]))
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// }
+		if err := hamt.MustBuild(func(hamtSetter hamtcontainer.HAMTSetter) error {
+			for i := 0; i < len(kvs); i += 2 {
+				if err := hamtSetter.Set([]byte(kvs[i]), []byte(kvs[i+1])); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}); err != nil {
+			return err
+		}
 
 		lnk, err := hamt.GetLink()
 		if err != nil {
@@ -127,6 +132,10 @@ var newHAMTCmd = &cobra.Command{
 			return err
 		}
 
+		if err := hamt.MustBuild(); err != nil {
+			return err
+		}
+
 		link, err := hamt.GetLink()
 		if err != nil {
 			return err
@@ -144,9 +153,6 @@ var setHAMTLinkCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		link := args[0]
 		childLink := args[1]
-		_ = childLink
-
-		fmt.Println("parent child", args[:])
 
 		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
 
@@ -161,22 +167,26 @@ var setHAMTLinkCmd = &cobra.Command{
 			return err
 		}
 
-		// childCid, err := cid.Parse(childLink)
-		// if err != nil {
-		// 	return err
-		// }
+		childCid, err := cid.Parse(childLink)
+		if err != nil {
+			return err
+		}
 
 		// Load the parent HAMT from link
-		// childHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: childCid}).Build()
-		// if err != nil {
-		// 	return err
-		// }
+		childHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: childCid}).Build()
+		if err != nil {
+			return err
+		}
 
-		// Set the child hamt as key on parent hamt
-		// err = parentHamt.Set(childHamt.Key(), childHamt)
-		// if err != nil {
-		// 	return err
-		// }
+		if err := parentHamt.MustBuild(func(hamtSetter hamtcontainer.HAMTSetter) error {
+			return hamtSetter.Set(childHamt.Key(), childHamt)
+		}); err != nil {
+			return err
+		}
+
+		if err := childHamt.MustBuild(); err != nil {
+			return err
+		}
 
 		parentHamtLink, err := parentHamt.GetLink()
 		if err != nil {
