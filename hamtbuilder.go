@@ -89,6 +89,7 @@ func (hb HAMTBuilder) Build() (*HAMTContainer, error) {
 
 	newHAMTContainer := &HAMTContainer{
 		key:     hb.key,
+		kvCache: make(map[string]interface{}),
 		storage: hb.storage,
 	}
 

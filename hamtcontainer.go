@@ -33,6 +33,7 @@ var ErrHAMTFailedToGetAsString = errors.New("Value returned should be String")
 type HAMTContainer struct {
 	mutex      sync.RWMutex
 	key        []byte
+	kvCache    map[string]interface{}
 	storage    storage.Storage
 	link       ipld.Link
 	linkSystem ipld.LinkSystem
@@ -129,6 +130,48 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) 
 		return err
 	}
 
+	for k, v := range hc.kvCache {
+		if err := assembler.AssembleKey().AssignString(k); err != nil {
+			return err
+		}
+
+		// Support types for value
+		switch v := v.(type) {
+		case string:
+			if err := assembler.AssembleValue().AssignString(v); err != nil {
+				return err
+			}
+		case []byte:
+			if err := assembler.AssembleValue().AssignBytes(v); err != nil {
+				return err
+			}
+		case ipld.Link:
+			if err := assembler.AssembleValue().AssignLink(v); err != nil {
+				return err
+			}
+		case *HAMTContainer:
+			link, err := v.GetLink()
+			if err != nil {
+				return err
+			}
+
+			if err := assembler.AssembleValue().AssignLink(link); err != nil {
+				return err
+			}
+		case HAMTContainer:
+			link, err := v.GetLink()
+			if err != nil {
+				return err
+			}
+
+			if err := assembler.AssembleValue().AssignLink(link); err != nil {
+				return err
+			}
+		default:
+			return ErrHAMTUnsupportedValueType
+		}
+	}
+
 	for _, assemblyFunc := range assemblyFuncs {
 		if err := assemblyFunc(HAMTSetter{assembler}); err != nil {
 			return err
@@ -155,11 +198,18 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) 
 	return nil
 }
 
+// Set adds k/v to the hamt but not imediately and only when build
+func (hc *HAMTContainer) Set(key []byte, value interface{}) {
+	hc.mutex.Lock()
+	defer hc.mutex.Unlock()
+	hc.kvCache[hex.EncodeToString(key)] = value
+}
+
 // Set adds a new k/v content for the HAMT
 // For string values it will add k/v pair of strings
 // For ipld.Link values it will add string key and a link for another HAMT structure as value
 func (hs *HAMTSetter) Set(key []byte, value interface{}) error {
-	if err := hs.assembler.AssembleKey().AssignString(hex.EncodeToString([]byte(key))); err != nil {
+	if err := hs.assembler.AssembleKey().AssignString(hex.EncodeToString(key)); err != nil {
 		return err
 	}
 

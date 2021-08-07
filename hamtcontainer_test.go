@@ -93,6 +93,36 @@ func TestHAMTContainerWithBytes(t *testing.T) {
 	assert.Nil(val)
 }
 
+func TestHAMTContainerWithCachedKV(t *testing.T) {
+	assert := assert.New(t)
+	store := storage.NewMemoryStorage()
+
+	// Create the first HAMT
+	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	assert.Nil(err)
+
+	assert.Nil(rootHAMT.Set([]byte("zoo"), []byte("zar")))
+
+	// Set some k/v
+	assert.Nil(rootHAMT.MustBuild(func(hamtSetter HAMTSetter) error {
+		return hamtSetter.Set([]byte("foo"), []byte("bar"))
+	}))
+
+	// Get node value as string
+	val, err := rootHAMT.GetAsBytes([]byte("foo"))
+	assert.Nil(err)
+	assert.Equal(string(val), "bar")
+
+	// Get node cached value as string
+	val, err = rootHAMT.GetAsBytes([]byte("zoo"))
+	assert.Nil(err)
+	assert.Equal(string(val), "zar")
+
+	val, err = rootHAMT.GetAsBytes([]byte("non-existing-key"))
+	assert.NotNil(err)
+	assert.Nil(val)
+}
+
 func TestHAMTContainerWithIPFS(t *testing.T) {
 	assert := assert.New(t)
 	ipfsURL, ok := os.LookupEnv("IPFS_URL")
