@@ -101,7 +101,8 @@ func TestHAMTContainerWithCachedKV(t *testing.T) {
 	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
 	assert.Nil(err)
 
-	assert.Nil(rootHAMT.Set([]byte("zoo"), []byte("zar")))
+	// Added to cached k/v to be build later
+	rootHAMT.Set([]byte("zoo"), []byte("zar"))
 
 	// Set some k/v
 	assert.Nil(rootHAMT.MustBuild(func(hamtSetter HAMTSetter) error {

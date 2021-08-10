@@ -1,15 +1,19 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"unicode"
 
 	"github.com/ipfs/go-cid"
 	ipfsApi "github.com/ipfs/go-ipfs-api"
+	"github.com/ipld/go-ipld-prime"
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	hamtcontainer "github.com/simplecoincom/go-ipld-adl-hamt-container"
 	"github.com/simplecoincom/go-ipld-adl-hamt-container/storage"
+	"github.com/simplecoincom/go-ipld-adl-hamt-container/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -112,6 +116,67 @@ var getKeyCmd = &cobra.Command{
 	},
 }
 
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
+}
+
+var listKeysValues = &cobra.Command{
+	Use:   "list",
+	Short: "List the keys values on HAMT container by the key",
+	Args:  cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		link := args[0]
+
+		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+
+		cid, err := cid.Parse(link)
+		if err != nil {
+			return err
+		}
+
+		// Load HAMT from link
+		hamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: cid}).Build()
+		if err != nil {
+			return err
+		}
+
+		hamt.View(func(key []byte, value interface{}) error {
+			if isASCII(string(key)) {
+				fmt.Printf("key %s ", string(key))
+			} else {
+				fmt.Printf("key %s ", hex.EncodeToString(key))
+			}
+
+			nodeVal, err := utils.NodeValue(value.(ipld.Node))
+			if err != nil {
+				return err
+			}
+
+			switch val := nodeVal.(type) {
+			case ipld.Link:
+				fmt.Println("link", val)
+			case string:
+				fmt.Println("value", string(val))
+			case []uint8:
+				if isASCII(string(key)) {
+					fmt.Println("value", hex.EncodeToString(val))
+				} else {
+					fmt.Println("value", string(val))
+				}
+			}
+
+			return nil
+		})
+
+		return nil
+	},
+}
+
 var hamtCmd = &cobra.Command{
 	Use:   "hamt",
 	Short: "Manage hamt",
@@ -203,6 +268,7 @@ func init() {
 	rootCmd.AddCommand(setKeyCmd)
 	rootCmd.AddCommand(getKeyCmd)
 	rootCmd.AddCommand(hamtCmd)
+	rootCmd.AddCommand(listKeysValues)
 
 	hamtCmd.AddCommand(setHAMTLinkCmd)
 	hamtCmd.AddCommand(newHAMTCmd)
