@@ -17,6 +17,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var hostFlag string
+
 var rootCmd = &cobra.Command{
 	Use: "hamtcli",
 }
@@ -40,7 +42,7 @@ var setKeyCmd = &cobra.Command{
 			return fmt.Errorf("Key and values should be pairs")
 		}
 
-		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+		store := storage.NewIPFSStorage(ipfsApi.NewShell(hostFlag))
 
 		cid, err := cid.Parse(link)
 		if err != nil {
@@ -84,7 +86,7 @@ var getKeyCmd = &cobra.Command{
 		link := args[0]
 		key := args[1]
 
-		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+		store := storage.NewIPFSStorage(ipfsApi.NewShell(hostFlag))
 
 		cid, err := cid.Parse(link)
 		if err != nil {
@@ -132,7 +134,7 @@ var listKeysValues = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		link := args[0]
 
-		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+		store := storage.NewIPFSStorage(ipfsApi.NewShell(hostFlag))
 
 		cid, err := cid.Parse(link)
 		if err != nil {
@@ -189,7 +191,7 @@ var newHAMTCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key := args[0]
 
-		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+		store := storage.NewIPFSStorage(ipfsApi.NewShell(hostFlag))
 
 		// Create the first HAMT
 		hamt, err := hamtcontainer.NewHAMTBuilder().Key([]byte(key)).Storage(store).Build()
@@ -219,7 +221,7 @@ var setHAMTLinkCmd = &cobra.Command{
 		link := args[0]
 		childLink := args[1]
 
-		store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
+		store := storage.NewIPFSStorage(ipfsApi.NewShell(hostFlag))
 
 		parentCid, err := cid.Parse(link)
 		if err != nil {
@@ -275,6 +277,17 @@ func init() {
 }
 
 func main() {
+	rootCmd.PersistentFlags().StringVarP(&hostFlag, "host", "H", "", "host of the IPFS node")
+
+	if len(hostFlag) == 0 {
+		tmpHostFlag, ok := os.LookupEnv("IPFS_URL")
+		if !ok {
+			hostFlag = "http://localhost:5001"
+		} else {
+			hostFlag = tmpHostFlag
+		}
+	}
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
