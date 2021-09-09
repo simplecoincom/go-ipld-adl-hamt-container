@@ -15,17 +15,18 @@ import (
 type readStore ipld.BlockReadOpener
 
 func (rs readStore) Get(c cid.Cid) (blocks.Block, error) {
-	link := cidlink.Link{Cid: c}
 	r, err := rs(ipld.LinkContext{
 		Ctx: context.Background(),
-	}, link)
+	}, cidlink.Link{Cid: c})
 	if err != nil {
 		return nil, err
 	}
+
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
+
 	return blocks.NewBlockWithCid(data, c)
 }
 

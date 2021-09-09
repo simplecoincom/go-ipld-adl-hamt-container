@@ -120,13 +120,14 @@ func (hb HAMTBuilder) Build() (*HAMTContainer, error) {
 		}
 	}
 
+	// Has a link, try to load
 	if hb.link != nil {
 		if err := newHAMTContainer.LoadLink(hb.link); err != nil {
 			return nil, err
 		}
 	}
 
-	// If has a link we should load from it
+	// If has the parent container and the link we should load the key from it
 	if hb.parentHAMTContainer != nil || hb.link != nil {
 		key, err := newHAMTContainer.GetAsBytes([]byte(reservedNameKey))
 		if err != nil {
