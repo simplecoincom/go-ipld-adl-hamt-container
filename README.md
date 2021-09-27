@@ -17,7 +17,7 @@ import (
 func main() {
 	// Create the root HAMT container
 	rootHAMT, err := hamtcontainer.NewHAMTBuilder(
-		hamtcontainer.Key([]byte("root"),
+		hamtcontainer.WithKey([]byte("root"),
 	).Build()
 	if err != nil {
 		panic(err)
