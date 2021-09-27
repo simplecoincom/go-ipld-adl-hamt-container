@@ -50,7 +50,10 @@ var setKeyCmd = &cobra.Command{
 		}
 
 		// Load HAMT from link
-		hamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: cid}).Build()
+		hamt, err := hamtcontainer.NewHAMTBuilder(
+			hamtcontainer.WithStorage(store),
+			hamtcontainer.WithLink(cidlink.Link{Cid: cid}),
+		).Build()
 		if err != nil {
 			return err
 		}
@@ -94,7 +97,10 @@ var getKeyCmd = &cobra.Command{
 		}
 
 		// Load HAMT from link
-		hamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: cid}).Build()
+		hamt, err := hamtcontainer.NewHAMTBuilder(
+			hamtcontainer.WithStorage(store),
+			hamtcontainer.WithLink(cidlink.Link{Cid: cid}),
+		).Build()
 		if err != nil {
 			return err
 		}
@@ -142,7 +148,10 @@ var listKeysValues = &cobra.Command{
 		}
 
 		// Load HAMT from link
-		hamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: cid}).Build()
+		hamt, err := hamtcontainer.NewHAMTBuilder(
+			hamtcontainer.WithStorage(store),
+			hamtcontainer.WithLink(cidlink.Link{Cid: cid}),
+		).Build()
 		if err != nil {
 			return err
 		}
@@ -194,7 +203,10 @@ var newHAMTCmd = &cobra.Command{
 		store := storage.NewIPFSStorage(ipfsApi.NewShell(hostFlag))
 
 		// Create the first HAMT
-		hamt, err := hamtcontainer.NewHAMTBuilder().Key([]byte(key)).Storage(store).Build()
+		hamt, err := hamtcontainer.NewHAMTBuilder(
+			hamtcontainer.WithKey([]byte(key)),
+			hamtcontainer.WithStorage(store),
+		).Build()
 		if err != nil {
 			return err
 		}
@@ -229,7 +241,10 @@ var setHAMTLinkCmd = &cobra.Command{
 		}
 
 		// Load the parent HAMT from link
-		parentHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: parentCid}).Build()
+		parentHamt, err := hamtcontainer.NewHAMTBuilder(
+			hamtcontainer.WithStorage(store),
+			hamtcontainer.WithLink(cidlink.Link{Cid: parentCid}),
+		).Build()
 		if err != nil {
 			return err
 		}
@@ -240,7 +255,10 @@ var setHAMTLinkCmd = &cobra.Command{
 		}
 
 		// Load the parent HAMT from link
-		childHamt, err := hamtcontainer.NewHAMTBuilder().Storage(store).FromLink(cidlink.Link{Cid: childCid}).Build()
+		childHamt, err := hamtcontainer.NewHAMTBuilder(
+			hamtcontainer.WithStorage(store),
+			hamtcontainer.WithLink(cidlink.Link{Cid: childCid}),
+		).Build()
 		if err != nil {
 			return err
 		}

@@ -19,7 +19,7 @@ func TestBuilderWithNoParams(t *testing.T) {
 
 func TestBuilderWithKeyParam(t *testing.T) {
 	assert := assert.New(t)
-	builder := NewHAMTBuilder().Key([]byte("root"))
+	builder := NewHAMTBuilder(WithKey([]byte("root")))
 	hamtContainer, err := builder.Build()
 	assert.Nil(err)
 	assert.Equal(string(hamtContainer.Key()), "root")
@@ -28,7 +28,7 @@ func TestBuilderWithKeyParam(t *testing.T) {
 func TestBuilderWithStorageParam(t *testing.T) {
 	assert := assert.New(t)
 	store := storage.NewMemoryStorage()
-	builder := NewHAMTBuilder().Storage(store)
+	builder := NewHAMTBuilder(WithStorage(store))
 	hamtContainer, err := builder.Build()
 	assert.Nil(err)
 	assert.Equal(hamtContainer.Storage(), store)
@@ -38,7 +38,10 @@ func TestBuilderWithParentParam(t *testing.T) {
 	assert := assert.New(t)
 	store := storage.NewMemoryStorage()
 
-	childContainer, err := NewHAMTBuilder().Storage(store).Key([]byte("child")).Build()
+	childContainer, err := NewHAMTBuilder(
+		WithStorage(store),
+		WithKey([]byte("child")),
+	).Build()
 	assert.Nil(err)
 	assert.NotNil(childContainer)
 
@@ -46,7 +49,10 @@ func TestBuilderWithParentParam(t *testing.T) {
 		return hamtSetter.Set([]byte("foo"), "bar")
 	}))
 
-	parentContainer, err := NewHAMTBuilder().Storage(store).Key([]byte("parent")).Build()
+	parentContainer, err := NewHAMTBuilder(
+		WithStorage(store),
+		WithKey([]byte("parent")),
+	).Build()
 	assert.Nil(err)
 	assert.NotNil(parentContainer)
 
@@ -54,7 +60,10 @@ func TestBuilderWithParentParam(t *testing.T) {
 		return hamtSetter.Set([]byte("child"), childContainer)
 	}))
 
-	newContainer, err := NewHAMTBuilder().Key([]byte("child")).FromNested(parentContainer).Build()
+	newContainer, err := NewHAMTBuilder(
+		WithKey([]byte("child")),
+		WithHAMTContainer(parentContainer),
+	).Build()
 	assert.Nil(err)
 	assert.NotNil(newContainer)
 }

@@ -13,6 +13,8 @@ import (
 var ErrCantUseStorageAndNested = errors.New("Cannot use Storage and FromNested in the same build")
 var ErrCantUseParentAndLink = errors.New("Cannot use Parant and Link in the same build")
 
+type Option func(*HAMTBuilder)
+
 type HAMTBuilder struct {
 	key                 []byte
 	storage             storage.Storage
@@ -21,32 +23,40 @@ type HAMTBuilder struct {
 }
 
 // NewHAMTBuilder create a new HAMTBuilder helper
-func NewHAMTBuilder() HAMTBuilder {
-	return HAMTBuilder{}
+func NewHAMTBuilder(options ...Option) *HAMTBuilder {
+	hamtBuilder := &HAMTBuilder{}
+	for _, opt := range options {
+		opt(hamtBuilder)
+	}
+	return hamtBuilder
 }
 
-// Key sets the key for the future HAMTContainer
-func (hb HAMTBuilder) Key(key []byte) HAMTBuilder {
-	hb.key = key
-	return hb
+// WithKey sets the key for the future HAMTContainer
+func WithKey(key []byte) Option {
+	return func(h *HAMTBuilder) {
+		h.key = key
+	}
 }
 
-// Storage sets the storage for the future HAMTContainer
-func (hb HAMTBuilder) Storage(storage storage.Storage) HAMTBuilder {
-	hb.storage = storage
-	return hb
+// WithStorage sets the storage for the future HAMTContainer
+func WithStorage(storage storage.Storage) Option {
+	return func(h *HAMTBuilder) {
+		h.storage = storage
+	}
 }
 
-// FromLink sets the link for the future HAMTContainer
-func (hb HAMTBuilder) FromLink(link ipld.Link) HAMTBuilder {
-	hb.link = link
-	return hb
+// WithLink sets the link for the future HAMTContainer
+func WithLink(link ipld.Link) Option {
+	return func(h *HAMTBuilder) {
+		h.link = link
+	}
 }
 
-// FromNested sets the parent container to load from the future HAMTContainer
-func (hb HAMTBuilder) FromNested(parent *HAMTContainer) HAMTBuilder {
-	hb.parentHAMTContainer = parent
-	return hb
+// WithHAMTContainer sets the parent container to load from the future HAMTContainer
+func WithHAMTContainer(hamtContainer *HAMTContainer) Option {
+	return func(h *HAMTBuilder) {
+		h.parentHAMTContainer = hamtContainer
+	}
 }
 
 func (hb *HAMTBuilder) parseParamRules() error {
