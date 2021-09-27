@@ -16,7 +16,9 @@ import (
 
 func main() {
 	// Create the root HAMT container
-	rootHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("root")).Build()
+	rootHAMT, err := hamtcontainer.NewHAMTBuilder(
+		hamtcontainer.Key([]byte("root"),
+	).Build()
 	if err != nil {
 		panic(err)
 	}
@@ -54,7 +56,10 @@ func main() {
 	store := storage.NewRedisStorage("localhost:6379", "")
 
 	// Create the root HAMT container
-	rootHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	rootHAMT, err := hamtcontainer.NewHAMTBuilder(
+		hamtcontainer.WithKey([]byte("root")),
+		hamtcontainer.WithStorage(store),
+	).Build()
 	if err != nil {
 		panic(err)
 	}
@@ -92,7 +97,10 @@ func main() {
 	store := storage.NewMemoryStorage()
 
 	// Create the child HAMT container
-	childHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("child")).Storage(store).Build()
+	childHAMT, err := hamtcontainer.NewHAMTBuilder(
+		hamtcontainer.WithKey([]byte("child")),
+		hamtcontainer.WithStorage(store),
+	).Build()
 	if err != nil {
 		panic(err)
 	}
@@ -106,7 +114,10 @@ func main() {
 	}
 
 	// Create the root HAMT container
-	parentHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("parent")).Storage(store).Build()
+	parentHAMT, err := hamtcontainer.NewHAMTBuilder(
+		hamtcontainer.WithKey([]byte("parent")),
+		hamtcontainer.WithStorage(store),
+	).Build()
 	if err != nil {
 		panic(err)
 	}
@@ -120,7 +131,10 @@ func main() {
 	}
 
 	// Load child HAMT container
-	newChildHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("child")).FromNested(parentHAMT).Build()
+	newChildHAMT, err := hamtcontainer.NewHAMTBuilder(
+		hamtcontainer.WithKey([]byte("child")),
+		hamtcontainer.WithHAMTContainer(parentHAMT),
+	).Build()
 	if err != nil {
 		panic(err)
 	}
@@ -150,7 +164,10 @@ func main() {
 	store := storage.NewIPFSStorage(ipfsApi.NewShell("http://localhost:5001"))
 
 	// Create the first HAMT
-	rootHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	rootHAMT, err := hamtcontainer.NewHAMTBuilder(
+		hamtcontainer.WithKey([]byte("root")),
+		hamtcontainer.WithStorage(store),
+	).Build()
 	if err != nil {
 		panic(err)
 	}
@@ -170,7 +187,11 @@ func main() {
 	}
 
 	// Load HAMT from link
-	newHC, err := hamtcontainer.NewHAMTBuilder().Key([]byte("root")).Storage(store).FromLink(lnk).Build()
+	newHC, err := hamtcontainer.NewHAMTBuilder(
+		hamtcontainer.WithKey([]byte("root")),
+		hamtcontainer.WithStorage(store),
+		hamtcontainer.WithLink(lnk)
+	).Build()
 	if err != nil {
 		panic(err)
 	}
@@ -200,7 +221,10 @@ func main() {
 	store := storage.NewRedisStorage("localhost:6379", "")
 
 	// Create the root HAMT container
-	rootHAMT, err := hamtcontainer.NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	rootHAMT, err := hamtcontainer.NewHAMTBuilder(
+		hamtcontainer.WithKey([]byte("root")),
+		hamtcontainer.WithStorage(store),
+	).Build()
 	if err != nil {
 		panic(err)
 	}
