@@ -157,10 +157,15 @@ func TestHAMTContainerWithIPFS(t *testing.T) {
 	newHC, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).FromLink(lnk).Build()
 	assert.Nil(err)
 
+	// Shoud rebuild prev values too
+	assert.Nil(newHC.MustBuild())
+
 	// Get node value as string
 	val2, err := newHC.GetAsBytes([]byte("foo"))
 	assert.Nil(err)
 	assert.Equal(string(val2), "bar")
+
+	assert.Equal("root", string(newHC.Key()))
 }
 
 func TestNestedHAMTContainer(t *testing.T) {

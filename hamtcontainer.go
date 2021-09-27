@@ -21,26 +21,35 @@ import (
 
 const reservedNameKey = "__META_RESERVED_HAMT_KEY__"
 
-var ErrHAMTNotBuild = errors.New("HAMT not ready, build first")
-var ErrHAMTValueNotFound = errors.New("Value not found at HAMT")
-var ErrHAMTNoNestedFound = errors.New("No nested found with the given key")
-var ErrHAMTFailedToLoadNested = errors.New("Failed to load link from nested HAMT")
-var ErrHAMTUnsupportedValueType = errors.New("Unsupported value")
-var ErrHAMTFailedToGetAsLink = errors.New("Value returned should be ipld.Link")
-var ErrHAMTFailedToGetAsBytes = errors.New("Value returned should be Bytes")
-var ErrHAMTFailedToGetAsString = errors.New("Value returned should be String")
+var (
+	ErrHAMTNotBuild                  = errors.New("HAMT not ready, build first")
+	ErrHAMTValueNotFound             = errors.New("Value not found at HAMT")
+	ErrHAMTNoNestedFound             = errors.New("No nested found with the given key")
+	ErrHAMTFailedToLoadNested        = errors.New("Failed to load link from nested HAMT")
+	ErrHAMTUnsupportedValueType      = errors.New("Unsupported value")
+	ErrHAMTUnsupportedCacheValueType = errors.New("Unsupported cache value")
+	ErrHAMTFailedToGetAsLink         = errors.New("Value returned should be ipld.Link")
+	ErrHAMTFailedToGetAsBytes        = errors.New("Value returned should be Bytes")
+	ErrHAMTFailedToGetAsString       = errors.New("Value returned should be String")
+
+	BitWidth   = 8
+	BucketSize = 1024
+)
 
 type HAMTContainer struct {
-	mutex      sync.RWMutex
-	key        []byte
+	mutex sync.RWMutex
+	key   []byte
+	// Used to cache key before build the HAMT Container
 	kvCache    map[string]interface{}
 	storage    storage.Storage
 	link       ipld.Link
 	linkSystem ipld.LinkSystem
 	linkProto  ipld.LinkPrototype
 	node       ipld.Node
+	limit      int
 }
 
+// HAMTSetter is a helper structure for set HAMT key values
 type HAMTSetter struct {
 	assembler ipld.MapAssembler
 }
@@ -91,12 +100,12 @@ func (hc *HAMTContainer) LoadLink(link ipld.Link) error {
 	hc.mutex.Lock()
 	defer hc.mutex.Unlock()
 
-	nodePrototye := basicnode.Prototype.Any
+	nodePrototype := basicnode.Prototype.Any
 
 	node, err := hc.linkSystem.Load(
 		ipld.LinkContext{}, // The zero value is fine.  Configure it it you want cancellability or other features.
 		link,               // The Link we want to load!
-		nodePrototye,       // The NodePrototype says what kind of Node we want as a result.
+		nodePrototype,      // The NodePrototype says what kind of Node we want as a result.
 	)
 	if err != nil {
 		return err
@@ -114,7 +123,7 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) 
 	defer hc.mutex.Unlock()
 
 	// Creates the builder for the HAMT
-	builder := hamt.NewBuilder(hamt.Prototype{BitWidth: 3, BucketSize: 64}).
+	builder := hamt.NewBuilder(hamt.Prototype{BitWidth: BitWidth, BucketSize: BucketSize}).
 		WithLinking(hc.linkSystem, hc.linkProto)
 
 	assembler, err := builder.BeginMap(0)
@@ -128,6 +137,46 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) 
 
 	if err := assembler.AssembleValue().AssignBytes(hc.key); err != nil {
 		return err
+	}
+
+	if hc.node != nil {
+		mapIter := hc.node.MapIterator()
+
+		for !mapIter.Done() {
+			key, value, err := mapIter.Next()
+			if err != nil {
+				return err
+			}
+
+			ks, err := key.AsString()
+			if err != nil {
+				return err
+			}
+
+			bs, err := hex.DecodeString(ks)
+			if err != nil {
+				return err
+			}
+
+			// Do not view meta keys
+			if string(bs) == reservedNameKey {
+				continue
+			}
+
+			switch kind := value.Kind(); kind {
+			case ipld.Kind_String:
+				val, _ := value.AsString()
+				hc.kvCache[string(ks)] = val
+			case ipld.Kind_Bytes:
+				val, _ := value.AsBytes()
+				hc.kvCache[string(ks)] = val
+			case ipld.Kind_Link:
+				val, _ := value.AsLink()
+				hc.kvCache[string(ks)] = val
+			default:
+				return ErrHAMTUnsupportedCacheValueType
+			}
+		}
 	}
 
 	for k, v := range hc.kvCache {
@@ -367,6 +416,7 @@ func (hc *HAMTContainer) View(iterFunc func(key []byte, value interface{}) error
 	return nil
 }
 
+// WriteCar creates the car file
 func (hc *HAMTContainer) WriteCar(writer io.Writer) error {
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()
