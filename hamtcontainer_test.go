@@ -237,7 +237,6 @@ func TestUpdateHAMTContainer(t *testing.T) {
 	l4, err := hamt.GetLink()
 	assert.Nil(err)
 	assert.Equal("bafyrgqg3c2hkug64cdlotx2yaxdekjx2s7rxjn734a2ohwfwzwwt5me3aqsv6skoyeksgi7iuecdzkrx6z37l7m73zwrurz2z644cyl35a4qe", l4.String())
-
 }
 
 func TestNestedHAMTContainer(t *testing.T) {

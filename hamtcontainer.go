@@ -192,6 +192,46 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...AssemblerFunc) error {
 	}
 
 	// For each key in cache should be added too
+	if hc.node != nil {
+		mapIter := hc.node.MapIterator()
+
+		for !mapIter.Done() {
+			key, value, err := mapIter.Next()
+			if err != nil {
+				return err
+			}
+
+			ks, err := key.AsString()
+			if err != nil {
+				return err
+			}
+
+			bs, err := hex.DecodeString(ks)
+			if err != nil {
+				return err
+			}
+
+			// Do not view meta keys
+			if string(bs) == reservedNameKey {
+				continue
+			}
+
+			switch kind := value.Kind(); kind {
+			case ipld.Kind_String:
+				val, _ := value.AsString()
+				hc.kvCache[string(ks)] = val
+			case ipld.Kind_Bytes:
+				val, _ := value.AsBytes()
+				hc.kvCache[string(ks)] = val
+			case ipld.Kind_Link:
+				val, _ := value.AsLink()
+				hc.kvCache[string(ks)] = val
+			default:
+				return ErrHAMTUnsupportedCacheValueType
+			}
+		}
+	}
+
 	for k, v := range hc.kvCache {
 		if err := assembler.AssembleKey().AssignString(k); err != nil {
 			return err
