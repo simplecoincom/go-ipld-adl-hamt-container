@@ -224,6 +224,20 @@ func TestUpdateHAMTContainer(t *testing.T) {
 	l3, err := hamt.GetLink()
 	assert.Nil(err)
 	assert.Equal("bafyrgqbhi5gpyypniliixeboianpfu7wqfp2w7mhstbzl2k72vya7kuj7nvwtdbaplkvadv5w5c4ywjnkofxpyuav7jeb6sewuww7b4k5qi64", l3.String())
+
+	// Set some k/v
+	assert.Nil(hamt.MustBuild(func(hamtSetter HAMTSetter) error {
+		return hamtSetter.Set([]byte("zoo"), "zoor")
+	}))
+
+	s3, err := hamt.GetAsString([]byte("zoo"))
+	assert.Nil(err)
+	assert.Equal(s3, "zoor")
+
+	l4, err := hamt.GetLink()
+	assert.Nil(err)
+	assert.Equal("bafyrgqg3c2hkug64cdlotx2yaxdekjx2s7rxjn734a2ohwfwzwwt5me3aqsv6skoyeksgi7iuecdzkrx6z37l7m73zwrurz2z644cyl35a4qe", l4.String())
+
 }
 
 func TestNestedHAMTContainer(t *testing.T) {
