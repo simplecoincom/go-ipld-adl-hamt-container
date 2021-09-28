@@ -125,6 +125,7 @@ func (hb HAMTBuilder) Build() (*HAMTContainer, error) {
 			return nil, ErrHAMTNoNestedFound
 		}
 
+		// Should load link from parent
 		if err := newHAMTContainer.LoadLink(link); err != nil {
 			return nil, ErrHAMTFailedToLoadNested
 		}

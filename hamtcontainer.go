@@ -21,6 +21,9 @@ import (
 
 const reservedNameKey = "__META_RESERVED_HAMT_KEY__"
 
+// AssemblerFunc function used to set assembler routines
+type AssemblerFunc func(hamtSetter HAMTSetter) error
+
 var (
 	ErrHAMTNotBuild                  = errors.New("HAMT not ready, build first")
 	ErrHAMTValueNotFound             = errors.New("Value not found at HAMT")
@@ -118,7 +121,8 @@ func (hc *HAMTContainer) LoadLink(link ipld.Link) error {
 }
 
 // MustBuild is used to build the key maps
-func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) error) error {
+// It'll generate the final version of the node with the link
+func (hc *HAMTContainer) MustBuild(assemblyFuncs ...AssemblerFunc) error {
 	hc.mutex.Lock()
 	defer hc.mutex.Unlock()
 
@@ -126,19 +130,24 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) 
 	builder := hamt.NewBuilder(hamt.Prototype{BitWidth: BitWidth, BucketSize: BucketSize}).
 		WithLinking(hc.linkSystem, hc.linkProto)
 
+	// Begin the map build
 	assembler, err := builder.BeginMap(0)
 	if err != nil {
 		return err
 	}
 
-	if err := assembler.AssembleKey().AssignString(hex.EncodeToString([]byte(reservedNameKey))); err != nil {
-		return err
+	// Set key and value for reserved name
+	{
+		if err := assembler.AssembleKey().AssignString(hex.EncodeToString([]byte(reservedNameKey))); err != nil {
+			return err
+		}
+
+		if err := assembler.AssembleValue().AssignBytes(hc.key); err != nil {
+			return err
+		}
 	}
 
-	if err := assembler.AssembleValue().AssignBytes(hc.key); err != nil {
-		return err
-	}
-
+	// Node not nil, then should concat
 	if hc.node != nil {
 		mapIter := hc.node.MapIterator()
 
@@ -148,21 +157,24 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) 
 				return err
 			}
 
+			// Keys are always store as string on key value
 			ks, err := key.AsString()
 			if err != nil {
 				return err
 			}
 
-			bs, err := hex.DecodeString(ks)
+			// But should be decoded to bytes
+			kb, err := hex.DecodeString(ks)
 			if err != nil {
 				return err
 			}
 
 			// Do not view meta keys
-			if string(bs) == reservedNameKey {
+			if string(kb) == reservedNameKey {
 				continue
 			}
 
+			// Concat the prev values with current cache
 			switch kind := value.Kind(); kind {
 			case ipld.Kind_String:
 				val, _ := value.AsString()
@@ -179,6 +191,7 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) 
 		}
 	}
 
+	// For each key in cache should be added too
 	for k, v := range hc.kvCache {
 		if err := assembler.AssembleKey().AssignString(k); err != nil {
 			return err
@@ -221,27 +234,33 @@ func (hc *HAMTContainer) MustBuild(assemblyFuncs ...func(hamtSetter HAMTSetter) 
 		}
 	}
 
+	// Run the assembly funcs
 	for _, assemblyFunc := range assemblyFuncs {
 		if err := assemblyFunc(HAMTSetter{assembler}); err != nil {
 			return err
 		}
 	}
 
+	// Finish the assembler process
 	if err := assembler.Finish(); err != nil {
 		return err
 	}
 
+	// Build the hamt
 	hc.node = hamt.Build(builder)
 
+	// Store the values into link system
 	link, err := hc.linkSystem.Store(
 		ipld.LinkContext{},
 		hc.linkProto,
 		hc.node,
 	)
+
 	if err != nil {
 		return err
 	}
 
+	// Our current link
 	hc.link = link
 
 	return nil
@@ -307,10 +326,12 @@ func (hc *HAMTContainer) Get(key []byte) (interface{}, error) {
 	hc.mutex.Lock()
 	defer hc.mutex.Unlock()
 
+	// Node should be build to retrieve values
 	if hc.node == nil {
 		return nil, ErrHAMTNotBuild
 	}
 
+	// Lookup by string, first translate the byte to hex string
 	valNode, err := hc.node.LookupByString(hex.EncodeToString(key))
 	if err != nil {
 		if errors.Is(err, err.(ipld.ErrNotExists)) {
@@ -381,6 +402,7 @@ func (hc *HAMTContainer) View(iterFunc func(key []byte, value interface{}) error
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()
 
+	// Should build the node before
 	if hc.node == nil {
 		return ErrHAMTNotBuild
 	}
@@ -393,22 +415,25 @@ func (hc *HAMTContainer) View(iterFunc func(key []byte, value interface{}) error
 			return err
 		}
 
+		// Keys are always store as string on key value
 		ks, err := key.AsString()
 		if err != nil {
 			return err
 		}
 
-		bs, err := hex.DecodeString(ks)
+		// Decode to bytes before return
+		kb, err := hex.DecodeString(ks)
 		if err != nil {
 			return err
 		}
 
-		// Do not view meta keys
-		if string(bs) == reservedNameKey {
+		// Do not expose meta keys
+		if string(kb) == reservedNameKey {
 			continue
 		}
 
-		if err := iterFunc(bs, value); err != nil {
+		// Call the iter function with the key and value
+		if err := iterFunc(kb, value); err != nil {
 			return err
 		}
 	}
