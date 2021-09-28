@@ -14,7 +14,7 @@ import (
 
 func TestHAMTContainerWithString(t *testing.T) {
 	assert := assert.New(t)
-	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Build()
+	rootHAMT, err := NewHAMTBuilder(WithKey([]byte("root"))).Build()
 	assert.Nil(err)
 
 	// Set some k/v
@@ -40,7 +40,10 @@ func TestHAMTContainerViewIterator(t *testing.T) {
 	store := storage.NewMemoryStorage()
 
 	// Create the first HAMT
-	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	rootHAMT, err := NewHAMTBuilder(
+		WithKey([]byte("root")),
+		WithStorage(store),
+	).Build()
 	assert.Nil(err)
 
 	// Set some k/v
@@ -75,7 +78,9 @@ func TestHAMTContainerWithBytes(t *testing.T) {
 	store := storage.NewMemoryStorage()
 
 	// Create the first HAMT
-	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	rootHAMT, err := NewHAMTBuilder(
+		WithKey([]byte("root")),
+		WithStorage(store)).Build()
 	assert.Nil(err)
 
 	// Set some k/v
@@ -98,7 +103,10 @@ func TestHAMTContainerWithCachedKV(t *testing.T) {
 	store := storage.NewMemoryStorage()
 
 	// Create the first HAMT
-	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	rootHAMT, err := NewHAMTBuilder(
+		WithKey([]byte("root")),
+		WithStorage(store),
+	).Build()
 	assert.Nil(err)
 
 	// Added to cached k/v to be build later
@@ -136,7 +144,10 @@ func TestHAMTContainerWithIPFS(t *testing.T) {
 	store := storage.NewIPFSStorage(ipfsApi.NewShell(ipfsURL))
 
 	// Create the first HAMT
-	rootHAMT, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).Build()
+	rootHAMT, err := NewHAMTBuilder(
+		WithKey([]byte("root")),
+		WithStorage(store),
+	).Build()
 	assert.Nil(err)
 
 	// Set some k/v
@@ -154,7 +165,11 @@ func TestHAMTContainerWithIPFS(t *testing.T) {
 	assert.Nil(err)
 
 	// Load HAMT from link
-	newHC, err := NewHAMTBuilder().Key([]byte("root")).Storage(store).FromLink(lnk).Build()
+	newHC, err := NewHAMTBuilder(
+		WithKey([]byte("root")),
+		WithStorage(store),
+		WithLink(lnk),
+	).Build()
 	assert.Nil(err)
 
 	// Shoud rebuild prev values too
@@ -168,12 +183,71 @@ func TestHAMTContainerWithIPFS(t *testing.T) {
 	assert.Equal("root", string(newHC.Key()))
 }
 
+func TestUpdateHAMTContainer(t *testing.T) {
+	assert := assert.New(t)
+	store := storage.NewMemoryStorage()
+
+	// Create the first HAMT
+	hamt, err := NewHAMTBuilder(
+		WithKey([]byte("first")),
+		WithStorage(store),
+	).Build()
+	assert.NotNil(hamt)
+	assert.Nil(err)
+
+	// Set some k/v
+	assert.Nil(hamt.MustBuild(func(hamtSetter HAMTSetter) error {
+		return hamtSetter.Set([]byte("foo"), "bar")
+	}))
+
+	l1, err := hamt.GetLink()
+	assert.Nil(err)
+	assert.Equal("bafyrgqb5ccumyuwhlsulrr5yphx3t2fmd3dobftetwf4wk3f4twnkwj7kwhhwcs54b4tpfysgl6sefp4x2habf3oqnbtfqcshfkeod2s3ct3k", l1.String())
+
+	// Set some k/v
+	assert.Nil(hamt.MustBuild(func(hamtSetter HAMTSetter) error {
+		return hamtSetter.Set([]byte("zoo"), "zar")
+	}))
+
+	l2, err := hamt.GetLink()
+	assert.Nil(err)
+	assert.NotEqual("bafyrgqb5ccumyuwhlsulrr5yphx3t2fmd3dobftetwf4wk3f4twnkwj7kwhhwcs54b4tpfysgl6sefp4x2habf3oqnbtfqcshfkeod2s3ct3k", l2.String())
+
+	s1, err := hamt.GetAsString([]byte("foo"))
+	assert.Nil(err)
+	assert.Equal(s1, "bar")
+
+	s2, err := hamt.GetAsString([]byte("zoo"))
+	assert.Nil(err)
+	assert.Equal(s2, "zar")
+
+	l3, err := hamt.GetLink()
+	assert.Nil(err)
+	assert.Equal("bafyrgqbhi5gpyypniliixeboianpfu7wqfp2w7mhstbzl2k72vya7kuj7nvwtdbaplkvadv5w5c4ywjnkofxpyuav7jeb6sewuww7b4k5qi64", l3.String())
+
+	// Set some k/v
+	assert.Nil(hamt.MustBuild(func(hamtSetter HAMTSetter) error {
+		return hamtSetter.Set([]byte("zoo"), "zoor")
+	}))
+
+	s3, err := hamt.GetAsString([]byte("zoo"))
+	assert.Nil(err)
+	assert.Equal(s3, "zoor")
+
+	l4, err := hamt.GetLink()
+	assert.Nil(err)
+	assert.Equal("bafyrgqg3c2hkug64cdlotx2yaxdekjx2s7rxjn734a2ohwfwzwwt5me3aqsv6skoyeksgi7iuecdzkrx6z37l7m73zwrurz2z644cyl35a4qe", l4.String())
+}
+
 func TestNestedHAMTContainer(t *testing.T) {
 	assert := assert.New(t)
 	store := storage.NewMemoryStorage()
 
 	// Create the first HAMT
-	childHAMT, err := NewHAMTBuilder().Key([]byte("child")).Storage(store).Build()
+	childHAMT, err := NewHAMTBuilder(
+		WithKey([]byte("child")),
+		WithStorage(store),
+	).Build()
 	assert.NotNil(childHAMT)
 	assert.Nil(err)
 
@@ -183,7 +257,10 @@ func TestNestedHAMTContainer(t *testing.T) {
 	}))
 
 	// Creates the parent HAMT
-	parentHAMT, err := NewHAMTBuilder().Key([]byte("parent")).Storage(store).Build()
+	parentHAMT, err := NewHAMTBuilder(
+		WithKey([]byte("parent")),
+		WithStorage(store),
+	).Build()
 	assert.NotNil(parentHAMT)
 	assert.Nil(err)
 
@@ -193,7 +270,10 @@ func TestNestedHAMTContainer(t *testing.T) {
 	}))
 
 	// Load nested HAMT from parent HAMT
-	newHC, err := NewHAMTBuilder().Key([]byte("child")).FromNested(parentHAMT).Build()
+	newHC, err := NewHAMTBuilder(
+		WithKey([]byte("child")),
+		WithHAMTContainer(parentHAMT),
+	).Build()
 	assert.Nil(err)
 	assert.NotNil(newHC)
 
