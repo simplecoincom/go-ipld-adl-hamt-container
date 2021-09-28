@@ -183,6 +183,49 @@ func TestHAMTContainerWithIPFS(t *testing.T) {
 	assert.Equal("root", string(newHC.Key()))
 }
 
+func TestUpdateHAMTContainer(t *testing.T) {
+	assert := assert.New(t)
+	store := storage.NewMemoryStorage()
+
+	// Create the first HAMT
+	hamt, err := NewHAMTBuilder(
+		WithKey([]byte("first")),
+		WithStorage(store),
+	).Build()
+	assert.NotNil(hamt)
+	assert.Nil(err)
+
+	// Set some k/v
+	assert.Nil(hamt.MustBuild(func(hamtSetter HAMTSetter) error {
+		return hamtSetter.Set([]byte("foo"), "bar")
+	}))
+
+	l1, err := hamt.GetLink()
+	assert.Nil(err)
+	assert.Equal("bafyrgqb5ccumyuwhlsulrr5yphx3t2fmd3dobftetwf4wk3f4twnkwj7kwhhwcs54b4tpfysgl6sefp4x2habf3oqnbtfqcshfkeod2s3ct3k", l1.String())
+
+	// Set some k/v
+	assert.Nil(hamt.MustBuild(func(hamtSetter HAMTSetter) error {
+		return hamtSetter.Set([]byte("zoo"), "zar")
+	}))
+
+	l2, err := hamt.GetLink()
+	assert.Nil(err)
+	assert.NotEqual("bafyrgqb5ccumyuwhlsulrr5yphx3t2fmd3dobftetwf4wk3f4twnkwj7kwhhwcs54b4tpfysgl6sefp4x2habf3oqnbtfqcshfkeod2s3ct3k", l2.String())
+
+	s1, err := hamt.GetAsString([]byte("foo"))
+	assert.Nil(err)
+	assert.Equal(s1, "bar")
+
+	s2, err := hamt.GetAsString([]byte("zoo"))
+	assert.Nil(err)
+	assert.Equal(s2, "zar")
+
+	l3, err := hamt.GetLink()
+	assert.Nil(err)
+	assert.Equal("bafyrgqbhi5gpyypniliixeboianpfu7wqfp2w7mhstbzl2k72vya7kuj7nvwtdbaplkvadv5w5c4ywjnkofxpyuav7jeb6sewuww7b4k5qi64", l3.String())
+}
+
 func TestNestedHAMTContainer(t *testing.T) {
 	assert := assert.New(t)
 	store := storage.NewMemoryStorage()
